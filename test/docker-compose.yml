@@ -1,0 +1,88 @@
+# Create two containers one for simulator and another for running AI model.
+version: '2.4'
+services:
+  # build:
+  sim:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # image: litcr.io/lit-container/vaishnavahari/myml/agent-img:latest
+    container_name: send
+    environment:
+      - ACCEPT_EULA=Y
+      - PRIVACY_CONSENT=Y
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - WANDB_API_KEY=${WANDB_API_KEY}
+      - WANDB_USERNAME=gg-robotics
+      - HF_TOKEN=${HF_TOKEN}
+      - MASTER_ADDR=10.5.0.2
+      - MASTER_PORT=29501
+      - GLOO_SOCKET_IFNAME=eth0
+      - DISPLAY=:0  # Use the host's display for GUI
+    volumes:
+    # - ~/:/workspace/c3po
+    - ~/shared:/workspace/shared:rw
+    - ~/docker/isaac-sim/cache/kit:/isaac-sim/kit/cache:rw
+    - ~/docker/isaac-sim/cache/ov:/root/.cache/ov:rw
+    - ~/docker/isaac-sim/cache/pip:/root/.cache/pip:rw
+    - ~/docker/isaac-sim/cache/glcache:/root/.cache/nvidia/GLCache:rw
+    - ~/docker/isaac-sim/cache/computecache:/root/.nv/ComputeCache:rw
+    - ~/docker/isaac-sim/logs:/root/.nvidia-omniverse/logs:rw
+    - ~/docker/isaac-sim/data:/root/.local/share/ov/data:rw
+    - ~/docker/isaac-sim/documents:/root/Documents:rw
+    - ~/robotdataset/test/entrypoint.sh:/workspace/entrypoint.sh:rw
+    - ~/robotdataset:/workspace/robotdataset:rw
+    entrypoint: ["/bin/bash", "-i", "/workspace/entrypoint.sh"]
+    command: ["send"]
+    # entrypoint: ["tail", "-f", "/dev/null"]
+    # runtime: nvidia
+    networks:
+      custom_net:
+        ipv4_address: 10.5.0.3
+    restart: "no"
+  # No custom networks section needed; containers will use the default 'docker0' bridge network.
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # image: litcr.io/lit-container/vaishnavahari/myml/agent-img:latest
+    container_name: recv
+    ports:
+      - "80:80"  # Map port 80 of the host to port 80 of the container
+      - "443:443"  # Map port 443 of the host to port 443 of the container
+    environment:
+    - ACCEPT_EULA=Y
+    - PRIVACY_CONSENT=Y
+    - NVIDIA_VISIBLE_DEVICES=all
+    - NVIDIA_DRIVER_CAPABILITIES=all
+    - WANDB_API_KEY=${WANDB_API_KEY}
+    - WANDB_USERNAME=gg-robotics
+    - HF_TOKEN=${HF_TOKEN}
+    - MASTER_ADDR=10.5.0.2
+    - MASTER_PORT=29500
+    - GLOO_SOCKET_IFNAME=eth0
+    volumes:
+    # - ~/c3po:/workspace/c3po
+    - ~/shared:/workspace/shared:rw
+    - ~/robotdataset/test/entrypoint.sh:/workspace/entrypoint.sh:rw
+    - ~/robotdataset:/workspace/robotdataset:rw
+    entrypoint: ["/bin/bash","-i","/workspace/entrypoint.sh"]
+    command: ["recv"]
+    # entrypoint: ["tail", "-f", "/dev/null"]
+    # runtime: nvidia
+    networks:
+      custom_net:
+        ipv4_address: 10.5.0.2
+    restart: "no"
+
+# No custom networks section needed; containers will use the default 'docker0' bridge network.
+        
+networks:
+  custom_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.5.0.0/16
+          gateway: 10.5.0.1
