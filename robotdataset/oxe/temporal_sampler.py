@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Tuple
+from typing import Any, Collection, Dict, List, Tuple
 
 import torch
 from tensordict import TensorDict
@@ -40,7 +40,7 @@ class TemporalSampler(Sampler):
         self,
         delta_timestamps: Dict[str, List[float]],
         control_frequency: float = 10.0,
-        image_keys: FrozenSet[Tuple[str, ...]] = frozenset(),
+        image_keys: Collection[Tuple[str, ...]] = (),
     ) -> None:
         self.delta_timestamps = delta_timestamps
         self.control_frequency = control_frequency

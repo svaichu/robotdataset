@@ -29,7 +29,7 @@ For example in output I want to see, name: viola and versions [0.1.0]
 
 7. num_episodes property return the number of episodes in the loaded torchrl dataset.
 
-8. modalities property return the list of modalities in the dataset's observation. 
+8. modalities property return the list of modalities, based on what you inferred as its kind: image, text, state or action.  
 
 9. sampling requirement: Temporal sampling is compulsory. For example, batch of a img modality in observation should have shape (B, T, C, H, W) where B is batch size, T is temporal length, C is number of channels, H is height and W is width. Similarly for other modalities time dimension should be present.
 
