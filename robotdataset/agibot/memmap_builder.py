@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 
-from robotdataset.agibot.loader import download_tar, find_tar_for_episode
+from robotdataset.agibot.loader import HF_DATASET, download_tar, find_tar_for_episode
 from robotdataset.agibot.video_decoder import decode_mp4_from_tar
 from robotdataset.oxe.memmap_builder import is_episode_cached
 from robotdataset.oxe.utils import episode_to_ted_steps
@@ -104,6 +103,22 @@ def _build_one_agibot_episode(
     return n_steps
 
 
+def _is_tar_cached(repo_file_path: str, cache_dir: Path) -> bool:
+    """Return True if ``repo_file_path`` is already present in the HF local cache."""
+    try:
+        from huggingface_hub import try_to_load_from_cache
+
+        result = try_to_load_from_cache(
+            repo_id=HF_DATASET,
+            filename=repo_file_path,
+            repo_type="dataset",
+            cache_dir=str(cache_dir / "hf_cache"),
+        )
+        return result is not None
+    except Exception:
+        return False
+
+
 def build_missing_agibot_episodes(
     task_infos: Dict[int, List[Dict]],
     episode_map: Dict[int, Tuple[int, int]],
@@ -115,10 +130,15 @@ def build_missing_agibot_episodes(
 ) -> None:
     """Download and cache only the TAR data needed for ``missing`` global episodes.
 
-    For each missing episode:
-    - Only the TAR file that contains that specific episode is downloaded.
-    - Video is decoded for the selected ``cameras`` only.
-    - Already-cached episodes are skipped (safe to resume after interruption).
+    Runs in two phases:
+    1. **Download**: identifies unique TAR archives not yet in the HF cache and
+       downloads them with a per-TAR progress bar.  Each TAR may contain many
+       episodes, so this phase batches downloads before any decoding begins.
+    2. **Convert**: decodes video frames and writes TED memmaps for each missing
+       episode, with a per-episode progress bar.
+
+    Already-cached episodes and already-downloaded TARs are skipped in both
+    phases, so it is safe to interrupt and resume.
 
     Args:
         task_infos: ``{task_id: [episode_info_dict, ...]}``.
@@ -139,6 +159,47 @@ def build_missing_agibot_episodes(
         for ep in episodes
     }
 
+    # ------------------------------------------------------------------
+    # Phase 1: identify and download unique TAR archives that are not yet
+    #           in the HF local cache.
+    # ------------------------------------------------------------------
+    # Use an insertion-order dict to deduplicate while preserving order.
+    needed_tars: Dict[str, None] = {}
+    for gid in sorted(missing):
+        if is_episode_cached(episodes_dir / str(gid)):
+            continue
+        task_id, episode_id = episode_map[gid]
+        if ep_info_lookup.get((task_id, episode_id)) is None:
+            continue
+        try:
+            repo_path = find_tar_for_episode(task_id, episode_id, repo_files)
+            needed_tars[repo_path] = None
+        except ValueError:
+            pass
+
+    tars_to_fetch = [p for p in needed_tars if not _is_tar_cached(p, cache_dir)]
+
+    if tars_to_fetch:
+        pbar_dl = (
+            _tqdm_cls(
+                total=len(tars_to_fetch),
+                desc="Downloading TAR archives",
+                unit="tar",
+                dynamic_ncols=True,
+            )
+            if _tqdm_cls is not None
+            else None
+        )
+        for repo_path in tars_to_fetch:
+            download_tar(repo_path, cache_dir)
+            if pbar_dl is not None:
+                pbar_dl.update(1)
+        if pbar_dl is not None:
+            pbar_dl.close()
+
+    # ------------------------------------------------------------------
+    # Phase 2: decode videos and write TED memmaps for missing episodes.
+    # ------------------------------------------------------------------
     pbar = (
         _tqdm_cls(
             total=len(missing),
