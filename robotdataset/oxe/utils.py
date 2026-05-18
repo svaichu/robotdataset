@@ -79,7 +79,7 @@ def tf_to_torch(value: Any, tf_tensor_types: Tuple[type, ...] = ()) -> Any:
 
 def infer_kind(path: str, value: Any = None) -> str:
     lowered = path.lower()
-    if any(token in lowered for token in ("image", "camera", "rgb", "video", "frame")):
+    if any(token in lowered for token in ("image", "camera", "rgb", "video", "frame", "color", "fisheye", "depth")):
         return "image"
     if any(token in lowered for token in ("language", "instruction", "text", "caption", "prompt")):
         return "text"

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Tuple
+from typing import Any, Collection, Dict, List, Tuple
 
 import torch
 from tensordict import TensorDict
@@ -18,6 +18,13 @@ class TemporalSampler(Sampler):
     additionally permuted from the on-disk HWC layout to channel-first CHW,
     producing ``(B, T, C, H, W)``.
 
+    The ``next`` field mirrors the observation window across the current step:
+    if observation deltas are ``[-0.2, -0.1, 0.0]``, the next-field deltas are
+    ``[0.0, 0.1, 0.2]``.  Both share the anchor step at offset 0.  The
+    next-field values are read from the same storage leaf as the corresponding
+    observation (not from the TED ``next/…`` field), using positive step offsets
+    clamped to the episode boundary.
+
     Args:
         delta_timestamps: Mapping from slash-separated modality path to a list
             of time deltas **in seconds**.
@@ -33,7 +40,7 @@ class TemporalSampler(Sampler):
         self,
         delta_timestamps: Dict[str, List[float]],
         control_frequency: float = 10.0,
-        image_keys: FrozenSet[Tuple[str, ...]] = frozenset(),
+        image_keys: Collection[Tuple[str, ...]] = (),
     ) -> None:
         self.delta_timestamps = delta_timestamps
         self.control_frequency = control_frequency
@@ -42,6 +49,12 @@ class TemporalSampler(Sampler):
         self._offsets: Dict[Tuple[str, ...], List[int]] = {
             tuple(k.split("/")): [round(dt * control_frequency) for dt in deltas]
             for k, deltas in delta_timestamps.items()
+        }
+        # Mirror offsets for the next field: negate and sort ascending so that
+        # obs offsets [-2, -1, 0] → next offsets [0, 1, 2].
+        self._next_offsets: Dict[Tuple[str, ...], List[int]] = {
+            key: sorted(-off for off in offsets)
+            for key, offsets in self._offsets.items()
         }
 
     # ------------------------------------------------------------------
@@ -53,14 +66,7 @@ class TemporalSampler(Sampler):
         return False
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[TensorDict, dict]:
-        """Temporal sample called by ReplayBuffer machinery.
-
-        Builds the episode index from ``storage`` on-the-fly and returns the
-        full temporal batch rather than flat indices.  ``OXEDataset._sample``
-        calls ``__call__`` directly with a pre-cached index for efficiency;
-        this method exists so that a ``TemporalSampler`` can also be dropped
-        into a plain ``ReplayBuffer``.
-        """
+        """Temporal sample called by ReplayBuffer machinery."""
         storage_td: TensorDict = getattr(storage, "_storage", storage)
         starts, lengths = self.build_episode_index(storage_td)
         return self(storage_td, starts, lengths, batch_size), {}
@@ -109,6 +115,62 @@ class TemporalSampler(Sampler):
         return episode_starts, episode_lengths
 
     # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _build_flat_indices(
+        self,
+        anchor_indices: torch.Tensor,
+        offsets_map: Dict[Tuple[str, ...], List[int]],
+        episode_ids: torch.Tensor,
+        episode_starts: Dict[int, int],
+        episode_lengths: Dict[int, int],
+        batch_size: int,
+    ) -> Dict[Tuple[str, ...], torch.Tensor]:
+        """Build ``(B, T)`` flat-index tensors for each key/offsets pair.
+
+        Offsets outside the episode are clamped to the first/last frame
+        (repeat-pad).
+        """
+        key_flat_indices: Dict[Tuple[str, ...], torch.Tensor] = {}
+        for key_tuple, offsets in offsets_map.items():
+            T = len(offsets)
+            idx = torch.zeros(batch_size, T, dtype=torch.long)
+            for b, anchor in enumerate(anchor_indices.tolist()):
+                tid = int(episode_ids[anchor].item())
+                ep_start = episode_starts[tid]
+                ep_len = episode_lengths[tid]
+                step = anchor - ep_start
+                for t_i, off in enumerate(offsets):
+                    clamped = max(0, min(ep_len - 1, step + off))
+                    idx[b, t_i] = ep_start + clamped
+            key_flat_indices[key_tuple] = idx
+        return key_flat_indices
+
+    @staticmethod
+    def _read_leaf(storage_td: TensorDict, key_tuple: Tuple[str, ...]) -> torch.Tensor:
+        """Navigate to a leaf tensor in storage, raising KeyError with context on miss."""
+        try:
+            node = storage_td
+            for k in key_tuple[:-1]:
+                node = node[k]
+            return node[key_tuple[-1]]
+        except KeyError:
+            raise KeyError(
+                f"delta_timestamps key {'/'.join(key_tuple)!r} not found in storage. "
+                f"Top-level keys: {sorted(storage_td.keys())}"
+            )
+
+    def _apply_image_permutation(
+        self, data: torch.Tensor, key_tuple: Tuple[str, ...]
+    ) -> torch.Tensor:
+        """Permute HWC → CHW for image tensors: ``(B, T, H, W, C) → (B, T, C, H, W)``."""
+        if key_tuple in self.image_keys and data.ndim >= 4:
+            perm = (0, 1, data.ndim - 1) + tuple(range(2, data.ndim - 1))
+            return data.permute(*perm)
+        return data
+
+    # ------------------------------------------------------------------
     # Sampling
     # ------------------------------------------------------------------
 
@@ -122,9 +184,10 @@ class TemporalSampler(Sampler):
         """Return a temporally-structured batch of size ``batch_size``.
 
         All modalities in ``delta_timestamps`` are returned with shape
-        ``(B, T, ...)``.  Image modalities in ``image_keys`` are permuted to
-        ``(B, T, C, H, W)`` (channels first).  Other modalities keep their
-        ``(B, ...)`` shape at the anchor step.
+        ``(B, T, ...)``.  The corresponding ``next`` field is populated with the
+        mirrored temporal window (positive offsets from the anchor).  Image
+        modalities in ``image_keys`` are permuted to ``(B, T, C, H, W)``
+        (channels first) in both observation and next fields.
 
         Boundary handling: offsets outside an episode are clamped to the first /
         last frame of that episode (repeat-pad).
@@ -144,44 +207,31 @@ class TemporalSampler(Sampler):
         # Sample B anchor flat indices uniformly
         anchor_indices = torch.randint(0, total_steps, (batch_size,))
 
-        # Build (B, T) flat-index tensors for each temporal key
-        key_flat_indices: Dict[Tuple[str, ...], torch.Tensor] = {}
-        for key_tuple, offsets in self._offsets.items():
-            T = len(offsets)
-            idx = torch.zeros(batch_size, T, dtype=torch.long)
-            for b, anchor in enumerate(anchor_indices.tolist()):
-                tid = int(episode_ids[anchor].item())
-                ep_start = episode_starts[tid]
-                ep_len = episode_lengths[tid]
-                step = anchor - ep_start
-                for t_i, off in enumerate(offsets):
-                    clamped = max(0, min(ep_len - 1, step + off))
-                    idx[b, t_i] = ep_start + clamped
-            key_flat_indices[key_tuple] = idx
+        # (B, T) flat-index tensors for obs and next-field
+        obs_flat = self._build_flat_indices(
+            anchor_indices, self._offsets, episode_ids,
+            episode_starts, episode_lengths, batch_size,
+        )
+        next_flat = self._build_flat_indices(
+            anchor_indices, self._next_offsets, episode_ids,
+            episode_starts, episode_lengths, batch_size,
+        )
 
         # Anchor batch — non-temporal modalities keep shape (B, ...)
         batch = storage_td[anchor_indices]
 
-        # Override temporal modalities with (B, T, ...) tensors
-        for key_tuple, idx_tensor in key_flat_indices.items():
-            try:
-                node = storage_td
-                for k in key_tuple[:-1]:
-                    node = node[k]
-                leaf_tensor = node[key_tuple[-1]]  # (total_steps, ...)
-            except KeyError:
-                raise KeyError(
-                    f"delta_timestamps key {'/'.join(key_tuple)!r} not found in storage. "
-                    f"Top-level keys: {sorted(storage_td.keys())}"
-                )
-            temporal_data = leaf_tensor[idx_tensor]  # (B, T, ...)
+        # Override obs temporal modalities with (B, T, ...) tensors
+        for key_tuple, idx_tensor in obs_flat.items():
+            leaf = self._read_leaf(storage_td, key_tuple)
+            temporal = self._apply_image_permutation(leaf[idx_tensor], key_tuple)
+            batch[key_tuple] = temporal
 
-            # Images are stored as (H, W, C); permute to (C, H, W) → (B, T, C, H, W)
-            if key_tuple in self.image_keys and temporal_data.ndim >= 4:
-                # move last dim (C) to position 2: (B, T, H, W, C) → (B, T, C, H, W)
-                perm = (0, 1, temporal_data.ndim - 1) + tuple(range(2, temporal_data.ndim - 1))
-                temporal_data = temporal_data.permute(*perm)
-
-            batch[key_tuple] = temporal_data
+        # Populate next-field temporal modalities with mirrored (B, T, ...) tensors.
+        # Source: same storage leaf as obs (e.g. observation/image read with +offsets),
+        # destination: ("next", *key_tuple) in the batch.
+        for key_tuple, idx_tensor in next_flat.items():
+            leaf = self._read_leaf(storage_td, key_tuple)
+            temporal = self._apply_image_permutation(leaf[idx_tensor], key_tuple)
+            batch[("next",) + key_tuple] = temporal
 
         return batch

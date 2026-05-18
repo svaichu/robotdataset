@@ -7,6 +7,8 @@ Features,
 
 2. RoboChallenge/Table30v2, load this dataset from huggingface. doc/Table30v2.md
 
+3. AgiBotWorld-Beta, load this dataset from huggingface. doc/Agibot.md
+
 Follow good coding practices, make it easy to read and maintain. Since this library is meant for training deeplearning models, it should be efficient and easy to use in training pipelines.
 
 Use $VIRTUAL_ENV as python env

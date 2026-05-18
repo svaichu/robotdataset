@@ -27,6 +27,7 @@ from robotdataset.oxe.memmap_builder import (
 from robotdataset.oxe.utils import (
     ModalitySpec,
     flatten_structure,
+    infer_kind,
     latest_version,
     normalize_version_key,
     tf_to_torch,
@@ -157,6 +158,74 @@ def _tf_to_torch(value: Any) -> Any:
 
 def _flatten_structure(tree: Any, prefix: str = "") -> Dict[str, ModalitySpec]:
     return flatten_structure(tree, _TF_TENSOR_TYPES, prefix)
+
+
+def _flatten_tfds_features(tree: Any, prefix: str = "") -> Dict[str, ModalitySpec]:
+    """Traverse a TFDS FeaturesDict spec tree and return a ModalitySpec per leaf.
+
+    Unlike flatten_structure (which handles actual data values), this function
+    understands TFDS feature schema objects:
+      - FeaturesDict / any dict-like → recurse into items()
+      - Sequence / Dataset wrapper   → unwrap via .feature (RLDS 'steps' key
+                                       is stripped from the path automatically)
+      - Image / Tensor / Text leaf   → create ModalitySpec with inferred kind
+    """
+    flattened: Dict[str, ModalitySpec] = {}
+
+    # FeaturesDict and plain dicts both have items()
+    if hasattr(tree, "items") and callable(tree.items):
+        try:
+            for key, value in tree.items():
+                if key == "steps" and hasattr(value, "feature"):
+                    # RLDS top-level Sequence wrapper — descend without 'steps/' prefix
+                    flattened.update(_flatten_tfds_features(value.feature, prefix))
+                else:
+                    child = f"{prefix}/{key}" if prefix else str(key)
+                    flattened.update(_flatten_tfds_features(value, child))
+            return flattened
+        except Exception:
+            pass
+
+    # Sequence / Dataset feature (not dict-like but wraps an inner feature spec)
+    if hasattr(tree, "feature") and not hasattr(tree, "items"):
+        return _flatten_tfds_features(tree.feature, prefix)
+
+    # Leaf feature spec — extract shape and dtype
+    shape: Optional[tuple] = None
+    dtype_str: Optional[str] = None
+    if hasattr(tree, "shape"):
+        try:
+            raw = tree.shape
+            if hasattr(raw, "as_list"):
+                raw = raw.as_list()
+            shape = tuple(-1 if d is None else int(d) for d in raw) if raw else ()
+        except Exception:
+            pass
+    if hasattr(tree, "dtype"):
+        try:
+            dt = tree.dtype
+            dtype_str = dt.name if hasattr(dt, "name") else str(dt)
+        except Exception:
+            pass
+
+    path = prefix or "value"
+    type_name = type(tree).__name__.lower()
+
+    if dtype_str in {"string", "tf.string"} or "text" in type_name or "string" in type_name:
+        kind = "text"
+    elif "image" in type_name or (shape and len(shape) == 3 and shape[-1] in (1, 3, 4)):
+        kind = "image"
+    else:
+        kind = infer_kind(path)
+
+    flattened[path] = ModalitySpec(
+        path=path,
+        kind=kind,
+        dtype=dtype_str,
+        shape=shape,
+        source="metadata",
+    )
+    return flattened
 
 
 def _to_tensordict(episode: Any) -> Any:
@@ -332,7 +401,7 @@ class OXEDataset(BaseDatasetExperienceReplay):
         try:
             self.builder = tfds.builder_from_directory(builder_dir=str(local_dir))
             self.info = getattr(self.builder, "info", None)
-            self.modalities = self._infer_modalities()
+            self._modalities = self._infer_modalities()
         except Exception as error:
             raise RuntimeError(
                 f"Failed to load dataset '{dataset_name}' from '{local_dir}'. {error}"
@@ -399,7 +468,7 @@ class OXEDataset(BaseDatasetExperienceReplay):
         # Tensor modalities only (skip text / non-numeric leaves)
         default_dt: Dict[str, List[float]] = {
             path: [0.0]
-            for path, spec in self.modalities.items()
+            for path, spec in self._modalities.items()
             if spec.get("dtype") is not None and spec.get("kind") != "text"
         }
         # Caller-supplied values take precedence
@@ -473,27 +542,12 @@ class OXEDataset(BaseDatasetExperienceReplay):
         )
 
     def _infer_modalities(self) -> Dict[str, Dict[str, Any]]:
-        meta = getattr(self.builder, "meta", None)
-        metadata_tree: Any = None
-
-        if meta is not None:
-            if isinstance(meta, Mapping):
-                metadata_tree = meta
-            elif hasattr(meta, "as_dict"):
-                try:
-                    metadata_tree = meta.as_dict()
-                except Exception:
-                    pass
-            elif hasattr(meta, "features"):
-                metadata_tree = meta.features
-
-        if metadata_tree is None and self.info is not None:
-            metadata_tree = getattr(self.info, "features", None)
-
-        if metadata_tree is None:
+        features = None
+        if self.info is not None:
+            features = getattr(self.info, "features", None)
+        if features is None:
             return {}
-
-        flattened = _flatten_structure(metadata_tree)
+        flattened = _flatten_tfds_features(features)
         return {path: asdict(spec) for path, spec in flattened.items()}
 
     # ------------------------------------------------------------------
@@ -506,8 +560,8 @@ class OXEDataset(BaseDatasetExperienceReplay):
         return len(self._loaded_indices)
 
     @property
-    def image_keys(self) -> frozenset:
-        """Tuple-path keys whose tensors are stored as HWC images.
+    def image_keys(self) -> List[Tuple[str, ...]]:
+        """Tuple-path keys whose tensors are stored as HWC images, sorted for determinism.
 
         Pass to :class:`TemporalSampler` when you want automatic HWC→CHW
         permutation::
@@ -515,14 +569,34 @@ class OXEDataset(BaseDatasetExperienceReplay):
             sampler = TemporalSampler(..., image_keys=dataset.image_keys)
             dataset.set_sampler(sampler)
         """
-        return frozenset(
+        return sorted(
             tuple(path.split("/"))
-            for path, spec in self.modalities.items()
+            for path, spec in self._modalities.items()
             if spec.get("kind") == "image"
         )
 
+    @property
+    def modalities(self) -> Dict[str, List[str]]:
+        """Modality paths grouped by inferred kind.
+
+        Returns a dict with keys from ``{"image", "text", "action", "state"}``
+        (only kinds that are present in this dataset are included).
+        Each value is a sorted list of slash-separated field paths, e.g.
+        ``"observation/image"``.  System fields (reward, done, episode_id,
+        etc.) are excluded — use ``get_modalities()`` for the raw spec.
+        """
+        _KINDS = {"image", "text", "state", "action"}
+        grouped: Dict[str, List[str]] = {}
+        for path, spec in self._modalities.items():
+            kind = spec.get("kind", "generic")
+            if kind not in _KINDS:
+                continue
+            grouped.setdefault(kind, []).append(path)
+        return {k: sorted(v) for k, v in grouped.items()}
+
     def get_modalities(self) -> Dict[str, Dict[str, Any]]:
-        return dict(self.modalities)
+        """Raw per-path modality specs (path → ModalitySpec dict)."""
+        return dict(self._modalities)
 
     def get_dataset_info(self) -> Dict[str, Any]:
         if self.info is None:

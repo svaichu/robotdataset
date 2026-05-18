@@ -13,13 +13,17 @@ from robotdataset.oxe_dataset import (
     TemporalSampler,
 )
 from robotdataset.table30v2_dataset import Table30v2Dataset
+from robotdataset.agibot_dataset import AgiBotWorldBetaDataset
+from robotdataset.agibot.loader import list_agibot_tasks
 from robotdataset.utils import batchViz, itemViz
 
 __all__ = [
     'OXEDataset',
     'Table30v2Dataset',
+    'AgiBotWorldBetaDataset',
     'dataset2path',
     'list_datasets',
+    'list_agibot_tasks',
     'validate_dataset_name',
     'TemporalSampler',
     'batchViz',

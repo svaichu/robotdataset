@@ -29,14 +29,16 @@ For example in output I want to see, name: viola and versions [0.1.0]
 
 7. num_episodes property return the number of episodes in the loaded torchrl dataset.
 
-8. modalities property return the list of modalities in the dataset's observation. 
+8. modalities property return the list of modalities, based on what you inferred as its kind: image, text, state or action.  
 
 9. sampling requirement: Temporal sampling is compulsory. For example, batch of a img modality in observation should have shape (B, T, C, H, W) where B is batch size, T is temporal length, C is number of channels, H is height and W is width. Similarly for other modalities time dimension should be present.
 
-- This is controlled by a custom sampler with delta_timestamps and control_frequency (oxe datasets only comes in steps so this frequency is essential to work in seconds). delta_timestamps is dict of modality name to list of time deltas in seconds. For example, if delta_timestamps is {"img": [-0.1, 0, 0.2], "action": [0, 0.1]}, then it means that for img modality, we want to sample frames at time steps -0.1 seconds, 0 seconds and 0.2 seconds relative to the current time step.
+- This is controlled by a custom sampler with delta_timestamps and control_frequency (oxe datasets only comes in steps so this frequency is essential to work in seconds). delta_timestamps is dict of modality name to list of time deltas in seconds. For example, if delta_timestamps is {"img": [-0.2, -0.1, 0], "action": [-0.1, 0]}, then it means that for img modality, we want to sample frames at time steps -0.2 seconds, -0.1 seconds and 0 seconds relative to the current time step.
 
 - default control_frequency is 10 and delta_timestamps is 0 for all modalities.
 
-- To accomplish this, you can create a custom sampler based on torchrl's samplers. Create a field "collector" and "episode_id" to keep track of episode and not cross episode boundary while sampling.
+- To accomplish this, you can create a custom sampler based on torchrl's samplers. Create a field "collector" and "episode_id" to keep track of episode and not cross episode boundary while sampling. 
 
 - usage pattern would be, initiazilize dataset and sampler separately, then set the sampler in the dataset using a method set_sampler.
+
+10. Sampling in next field too. The above feature descibes how a modality in observation should be sampled. We need a similar result for next field in TED too. For example, if we are sampling at time steps -0.2 seconds, -0.1 seconds and 0 seconds for a modality in observation, then for the next field for that modality it should be mirror across the current time step. So for the next field, it should be sampled at time steps 0 seconds, 0.1 seconds and 0.2 seconds relative to the current time step.

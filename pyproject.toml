@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "robotdataset"
-version = "0.1.0"
-description = "A Python package for RL data handling."
+version = "0.1.1"
+description = "A TorchRL wrapper for robot learning datasets."
 authors = [
     { name = "Robotics Action Group", email = "vaishnavahari.seenivasan@rwth-aachen.de" }
 ]

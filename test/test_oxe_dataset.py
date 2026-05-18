@@ -715,3 +715,120 @@ def test_temporal_sampler_default_is_t1_for_all_modalities(
     # Temporal dim T=1 always present; image is channels-first (B, T, C, H, W)
     assert batch["action"].shape == (4, 1, 2)          # (B, T=1, action_dim)
     assert batch["observation", "image"].shape == (4, 1, 3, 8, 8)  # (B, T=1, C, H, W)
+
+
+# ---------------------------------------------------------------------------
+# Temporal sampling — next-field mirroring (feature #10)
+# ---------------------------------------------------------------------------
+
+def test_next_field_temporal_shape(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """next/observation/* has the same T as obs, with channels-first images."""
+    _patch(monkeypatch)
+    ds = oxe.OXEDataset(
+        dataset_name="droid",
+        split="train",
+        episodes=[0, 1, 2],
+        batch_size=4,
+        root=str(tmp_path),
+        delta_timestamps={
+            "observation/image": [-0.1, 0.0, 0.1],
+            "observation/state": [-0.1, 0.0, 0.1],
+        },
+        control_frequency=10.0,
+    )
+    batch = ds.sample()
+    # obs: (B, T=3, C, H, W)
+    assert batch["observation", "image"].shape == (4, 3, 3, 8, 8)
+    # next mirrors T=3, also channels-first
+    assert batch["next", "observation", "image"].shape == (4, 3, 3, 8, 8)
+    assert batch["next", "observation", "state"].shape == (4, 3, 4)
+
+
+def test_next_field_default_t1(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """With default T=1, next/observation/* also has T=1."""
+    _patch(monkeypatch)
+    ds = oxe.OXEDataset(
+        dataset_name="droid",
+        split="train",
+        episodes=[0, 1],
+        batch_size=4,
+        root=str(tmp_path),
+    )
+    batch = ds.sample()
+    assert batch["next", "observation", "image"].shape == (4, 1, 3, 8, 8)
+    assert batch["next", "observation", "state"].shape == (4, 1, 4)
+
+
+def test_next_field_mirrored_values() -> None:
+    """Unit test: next-field step offsets are the negation of obs offsets (sorted)."""
+    from robotdataset.oxe.temporal_sampler import TemporalSampler
+
+    # Synthetic 5-step episode; state[t] = t so we can track which step is sampled
+    ep_state = torch.arange(5, dtype=torch.float32).unsqueeze(1)  # (5, 1)
+    episode_ids = torch.zeros(5, dtype=torch.int64)
+    storage_td = TensorDict(
+        {
+            "observation": {"state": ep_state},
+            "next": {"observation": {"state": torch.zeros(5, 1)}},
+            "collector": {"episode_id": episode_ids},
+        },
+        batch_size=[5],
+    )
+
+    # obs offsets: round(-0.1*10)=-1, round(0.0*10)=0 → [-1, 0]
+    # next offsets (mirror): sorted([1, 0]) = [0, 1]
+    sampler = TemporalSampler(
+        delta_timestamps={"observation/state": [-0.1, 0.0]},
+        control_frequency=10.0,
+    )
+    starts = {0: 0}
+    lengths = {0: 5}
+
+    # Use anchor=2: obs=[step1, step2], next=[step2, step3]
+    anchor = torch.tensor([2])
+    obs_flat = sampler._build_flat_indices(anchor, sampler._offsets, episode_ids, starts, lengths, 1)
+    next_flat = sampler._build_flat_indices(anchor, sampler._next_offsets, episode_ids, starts, lengths, 1)
+
+    obs_data = ep_state[obs_flat[("observation", "state")]]   # (1, 2, 1)
+    next_data = ep_state[next_flat[("observation", "state")]]  # (1, 2, 1)
+
+    # obs at offset -1 (step 1) = 1.0; at offset 0 (step 2) = 2.0
+    assert obs_data[0, 0, 0].item() == pytest.approx(1.0)
+    assert obs_data[0, 1, 0].item() == pytest.approx(2.0)
+    # next at offset 0 (step 2) = 2.0; at offset +1 (step 3) = 3.0
+    assert next_data[0, 0, 0].item() == pytest.approx(2.0)
+    assert next_data[0, 1, 0].item() == pytest.approx(3.0)
+    # Anchor step is shared: last obs frame == first next frame
+    assert torch.allclose(obs_data[:, -1, :], next_data[:, 0, :])
+
+
+def test_next_field_boundary_clamped() -> None:
+    """next-field clamps positive offsets to the last frame when at episode end."""
+    from robotdataset.oxe.temporal_sampler import TemporalSampler
+
+    ep_state = torch.arange(3, dtype=torch.float32).unsqueeze(1)  # steps 0,1,2
+    episode_ids = torch.zeros(3, dtype=torch.int64)
+    storage_td = TensorDict(
+        {
+            "observation": {"state": ep_state},
+            "next": {"observation": {"state": torch.zeros(3, 1)}},
+            "collector": {"episode_id": episode_ids},
+        },
+        batch_size=[3],
+    )
+
+    sampler = TemporalSampler(
+        delta_timestamps={"observation/state": [-0.1, 0.0]},
+        control_frequency=10.0,
+    )
+    starts = {0: 0}
+    lengths = {0: 3}
+
+    # Anchor at last step (2): next offsets [0, +1] → [step2, step2] (clamped)
+    anchor = torch.tensor([2])
+    next_flat = sampler._build_flat_indices(anchor, sampler._next_offsets, episode_ids, starts, lengths, 1)
+    next_data = ep_state[next_flat[("observation", "state")]]  # (1, 2, 1)
+
+    # Both frames clamped to last step value (2.0)
+    assert next_data[0, 0, 0].item() == pytest.approx(2.0)
+    assert next_data[0, 1, 0].item() == pytest.approx(2.0)
