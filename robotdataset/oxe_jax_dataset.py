@@ -251,7 +251,7 @@ def _episode_to_numpy_steps(
     steps = [_tf_to_numpy(step, tf_tensor_types) for step in raw_steps]
     total = len(steps)
 
-    ted_steps: List[Dict[str, Any]] = []
+    converted_steps: List[Dict[str, Any]] = []
     for step_idx, step in enumerate(steps):
         is_last = bool(step.get("is_last", step_idx == total - 1))
         is_terminal = bool(step.get("is_terminal", is_last))
@@ -284,9 +284,9 @@ def _episode_to_numpy_steps(
                 continue
             item[key] = val
 
-        ted_steps.append(item)
+        converted_steps.append(item)
 
-    return ted_steps
+    return converted_steps
 
 
 def _stack_leaf_values(values: List[Any]) -> Tuple[str, Any]:
