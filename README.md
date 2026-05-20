@@ -13,6 +13,7 @@ A Python package for loading robot learning datasets into [TorchRL](https://gith
 | Dataset | Class | Status |
 |---|---|---|
 | Open X-Embodiment (OXE) | `OXEDataset` | Alpha |
+| Open X-Embodiment (OXE, JAX path) | `OXEJAXDataset` | Alpha |
 | Table30 v2 | `Table30v2Dataset` | In development |
 | AgiBotWorld-Beta | `AgiBotWorldBetaDataset` | In development |
 
