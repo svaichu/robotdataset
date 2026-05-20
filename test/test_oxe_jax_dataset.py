@@ -98,9 +98,9 @@ def test_jax_cache_reuse_for_same_episode_list(monkeypatch: pytest.MonkeyPatch, 
     calls = []
     original = oxe_jax.build_missing_episodes
 
-    def spy(*args, **kwargs):
-        calls.append(kwargs.get("missing", args[3] if len(args) > 3 else []))
-        return original(*args, **kwargs)
+    def spy(**kwargs):
+        calls.append(kwargs["missing"])
+        return original(**kwargs)
 
     monkeypatch.setattr(oxe_jax, "build_missing_episodes", spy)
     oxe_jax.OXEJAXDataset(dataset_name="droid", split="train", episodes=[0, 1, 2], root=str(tmp_path))
@@ -139,6 +139,7 @@ def test_jax_temporal_shapes_and_types(monkeypatch: pytest.MonkeyPatch, tmp_path
 
     assert isinstance(batch["observation"]["image"], jax.Array)
     assert isinstance(batch["action"], jax.Array)
+    # (batch=3, time=3, channels=3, height=8, width=8)
     assert batch["observation"]["image"].shape == (3, 3, 3, 8, 8)
     assert batch["next"]["observation"]["image"].shape == (3, 3, 3, 8, 8)
     assert batch["observation"]["state"].shape == (3, 3, 4)
@@ -156,14 +157,20 @@ def test_jax_text_is_non_array_metadata(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
 
 def test_jax_next_mirrored_window_values() -> None:
-    store = oxe_jax.CombinedNumpyStore.__new__(oxe_jax.CombinedNumpyStore)  # bypass file loading
-    store.n_steps = 5
     ep_state = np.arange(5, dtype=np.float32)[:, None]
-    store.leaves = {
-        ("observation", "state"): ep_state,
-        ("next", "observation", "state"): np.zeros((5, 1), dtype=np.float32),
-        ("collector", "episode_id"): np.zeros((5,), dtype=np.int64),
-    }
+    class DummyStore:
+        def __init__(self) -> None:
+            self.n_steps = 5
+            self.leaves = {
+                ("observation", "state"): ep_state,
+                ("next", "observation", "state"): np.zeros((5, 1), dtype=np.float32),
+                ("collector", "episode_id"): np.zeros((5,), dtype=np.int64),
+            }
+
+        def __len__(self) -> int:
+            return self.n_steps
+
+    store = DummyStore()
 
     sampler = oxe_jax.JAXTemporalSampler(
         delta_timestamps={"observation/state": [-0.1, 0.0]},

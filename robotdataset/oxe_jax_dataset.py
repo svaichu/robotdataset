@@ -211,6 +211,8 @@ def _flatten_features(tree: Any, prefix: str = "") -> Dict[str, ModalitySpec]:
             raw = tree.shape
             if hasattr(raw, "as_list"):
                 raw = raw.as_list()
+            # Preserve unknown dimensions with the same -1 sentinel used by
+            # the existing Torch OXE metadata reporting path so schemas stay aligned.
             shape = tuple(-1 if dim is None else int(dim) for dim in raw) if raw else ()
         except Exception:
             pass
@@ -550,6 +552,8 @@ class JAXTemporalSampler:
             for key, deltas in delta_timestamps.items()
         }
         self._next_offsets: Dict[Tuple[str, ...], List[int]] = {
+            # Mirror the observation window across the anchor step by negating
+            # each offset and sorting, so [-2, -1, 0] becomes [0, 1, 2].
             key: sorted(-off for off in offsets)
             for key, offsets in self._offsets.items()
         }
@@ -591,6 +595,9 @@ class JAXTemporalSampler:
                 ep_len = episode_lengths[ep_id]
                 step = anchor - ep_start
                 for t_idx, off in enumerate(offsets):
+                    # Clamp each temporal lookup to the current episode so
+                    # windows never read past episode boundaries; offsets that
+                    # run past the start/end repeat the boundary frame.
                     clamped = max(0, min(ep_len - 1, step + off))
                     idx[b, t_idx] = ep_start + clamped
             key_flat[key_tuple] = idx
@@ -598,6 +605,8 @@ class JAXTemporalSampler:
 
     def _apply_image_permutation(self, data: np.ndarray, key: Tuple[str, ...]) -> np.ndarray:
         if key in self.image_keys and data.ndim >= 4:
+            # Move the last axis (C) in a typical (B, T, H, W, C) tensor to
+            # the third position, yielding channel-first (B, T, C, H, W).
             perm = (0, 1, data.ndim - 1) + tuple(range(2, data.ndim - 1))
             return np.transpose(data, perm)
         return data
