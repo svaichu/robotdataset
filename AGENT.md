@@ -9,6 +9,8 @@ Features,
 
 3. AgiBotWorld-Beta, load this dataset from huggingface. doc/Agibot.md
 
+4. LIBERO, load this dataset from the modified version openvla/modified_libero_rlds. 
+
 Follow good coding practices, make it easy to read and maintain. Since this library is meant for training deeplearning models, it should be efficient and easy to use in training pipelines.
 
 Use $VIRTUAL_ENV as python env
