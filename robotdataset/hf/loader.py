@@ -252,10 +252,20 @@ def hf_episode_to_oxe_format(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def hf_row_to_oxe_episode(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert one HF row representing an entire episode to OXE-like format."""
+    """Convert one HF row representing an entire episode to OXE-like format.
+
+    Preferred schema is ``{"steps": [step_dict, ...]}``. If ``steps`` is
+    absent, the row is treated as a single-step episode.
+    """
     converted = _convert_tree(dict(row))
-    if "steps" in converted and isinstance(converted["steps"], list):
-        return {"steps": converted["steps"]}
+    if "steps" in converted:
+        steps = converted["steps"]
+        if not isinstance(steps, list):
+            raise ValueError(
+                "Unsupported episode row format: 'steps' must be a list of step dictionaries. "
+                f"Got type={type(steps).__name__}, value={steps!r}."
+            )
+        return {"steps": steps}
     return {"steps": [converted]}
 
 

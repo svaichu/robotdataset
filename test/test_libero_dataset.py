@@ -32,14 +32,10 @@ def _make_episode_row(episode_idx: int, n_steps: int = N_STEPS) -> dict:
     return {"steps": steps, "task_id": task_id}
 
 
-class FakeFeatures(dict):
-    pass
-
-
 class FakeEpisodeDataset:
     def __init__(self, rows: list):
         self._rows = list(rows)
-        self.features = FakeFeatures({"steps": None, "task_id": None})
+        self.features = {"steps": None, "task_id": None}
 
     def __iter__(self):
         return iter(self._rows)
@@ -72,7 +68,7 @@ def test_libero_dataset_step_count(monkeypatch, tmp_path: Path):
     assert ds.num_episodes == N_EPISODES
 
 
-def test_libero_sample_ted_keys(monkeypatch, tmp_path: Path):
+def test_libero_sample_td_keys(monkeypatch, tmp_path: Path):
     _patch(monkeypatch)
     ds = libero.LiberoDataset(batch_size=2, root=str(tmp_path))
     batch = ds.sample()

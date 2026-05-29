@@ -71,12 +71,12 @@ class LiberoDataset(BaseDatasetExperienceReplay):
 
         self.modalities = infer_modalities_from_storage(combined_td)
 
-        default_dt: Dict[str, List[float]] = {
+        default_delta_timestamps: Dict[str, List[float]] = {
             path: [0.0]
             for path, spec in self.modalities.items()
             if spec.get("dtype") is not None and spec.get("kind") != "text"
         }
-        effective_dt = {**default_dt, **(delta_timestamps or {})}
+        effective_dt = {**default_delta_timestamps, **(delta_timestamps or {})}
 
         self._episode_starts, self._episode_lengths = (
             TemporalSampler.build_episode_index(combined_td)
