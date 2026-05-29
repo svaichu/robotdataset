@@ -17,10 +17,16 @@ from robotdataset.agibot_dataset import AgiBotWorldBetaDataset
 from robotdataset.agibot.loader import list_agibot_tasks
 from robotdataset.utils import batchViz, itemViz
 
+try:
+    from robotdataset.robomimic_dataset import RobomimicDataset
+except Exception:
+    RobomimicDataset = None  # type: ignore[assignment,misc]
+
 __all__ = [
     'OXEDataset',
     'Table30v2Dataset',
     'AgiBotWorldBetaDataset',
+    'RobomimicDataset',
     'dataset2path',
     'list_datasets',
     'list_agibot_tasks',
