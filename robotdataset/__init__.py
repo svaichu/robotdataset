@@ -19,6 +19,7 @@ except Exception:  # pragma: no cover - optional dependency
     JAXTemporalSampler = None  # type: ignore[assignment]
 from robotdataset.table30v2_dataset import Table30v2Dataset
 from robotdataset.agibot_dataset import AgiBotWorldBetaDataset
+from robotdataset.libero_dataset import LiberoDataset
 from robotdataset.agibot.loader import list_agibot_tasks
 from robotdataset.utils import batchViz, itemViz
 
@@ -27,6 +28,7 @@ __all__ = [
     'OXEJAXDataset',
     'Table30v2Dataset',
     'AgiBotWorldBetaDataset',
+    'LiberoDataset',
     'dataset2path',
     'list_datasets',
     'list_agibot_tasks',
