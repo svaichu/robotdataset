@@ -167,10 +167,36 @@ def dict_to_tensordict(data: Dict[str, Any]) -> "TensorDict":
     return td
 
 
+def _is_string_like_leaf(value: Any) -> bool:
+    if isinstance(value, (str, bytes, bytearray)):
+        return True
+    if isinstance(value, np.ndarray) and value.dtype.kind in {"S", "U", "O"}:
+        return True
+    if isinstance(value, np.generic) and (
+        np.issubdtype(value.dtype, np.str_) or np.issubdtype(value.dtype, np.bytes_)
+    ):
+        return True
+    if isinstance(value, (list, tuple)) and value and all(isinstance(v, str) for v in value):
+        return True
+    return False
+
+
+def _drop_string_fields(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        filtered: Dict[str, Any] = {}
+        for key, child in value.items():
+            if _is_string_like_leaf(child):
+                continue
+            filtered[key] = _drop_string_fields(child)
+        return filtered
+    return value
+
+
 def episode_to_ted_steps(
     episode: Any,
     episode_idx: int,
     tf_tensor_types: Tuple[type, ...] = (),
+    load_str_fields: bool = True,
 ) -> List["TensorDict"]:
     """Convert one TFDS episode to a list of TED-format TensorDicts (one per step).
 
@@ -214,6 +240,9 @@ def episode_to_ted_steps(
         next_step = steps[t + 1] if t < T - 1 else step
         obs = step.get("observation", {})
         next_obs = next_step.get("observation", {})
+        if not load_str_fields:
+            obs = _drop_string_fields(obs)
+            next_obs = _drop_string_fields(next_obs)
 
         td = dict_to_tensordict(
             {
@@ -232,11 +261,12 @@ def episode_to_ted_steps(
         )
 
         # Pass through any extra string/non-tensor fields (e.g. language_instruction)
-        for key, val in step.items():
-            if key not in {"observation", "action", "reward", "is_last", "is_terminal",
-                           "is_first", "discount", "steps"}:
-                if not isinstance(val, (torch.Tensor, dict)):
-                    td.set_non_tensor(key, val if not isinstance(val, bytes) else val.decode("utf-8"))
+        if load_str_fields:
+            for key, val in step.items():
+                if key not in {"observation", "action", "reward", "is_last", "is_terminal",
+                               "is_first", "discount", "steps"}:
+                    if not isinstance(val, (torch.Tensor, dict)):
+                        td.set_non_tensor(key, val if not isinstance(val, bytes) else val.decode("utf-8"))
 
         ted_steps.append(td)
 

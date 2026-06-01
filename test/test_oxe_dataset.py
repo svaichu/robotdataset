@@ -216,6 +216,15 @@ def test_episode_to_ted_steps_flat_format() -> None:
     assert len(steps) == 1
 
 
+def test_episode_to_ted_steps_without_str_fields() -> None:
+    episode = _make_episode(0, n_steps=1)
+    steps = episode_to_ted_steps(episode, episode_idx=0, load_str_fields=False)
+    assert steps[0].is_contiguous()
+    assert "observation" in steps[0].keys()
+    assert "action" in steps[0].keys()
+    assert "language_instruction" not in steps[0].keys()
+
+
 # ---------------------------------------------------------------------------
 # list_datasets / validate / dataset2path
 # ---------------------------------------------------------------------------
@@ -310,6 +319,22 @@ def test_sample_observation_image(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     batch = ds.sample()
     assert batch["observation", "image"].shape == (2, 1, 3, 8, 8)  # (B, T=1, C, H, W)
     assert batch["observation", "image"].dtype == torch.uint8
+
+
+def test_sample_without_str_fields_is_contiguous(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _patch(monkeypatch)
+    ds = oxe.OXEDataset(
+        dataset_name="droid",
+        split="train",
+        batch_size=2,
+        root=str(tmp_path),
+        load_str_fields=False,
+    )
+    batch = ds.sample()
+    assert batch.is_contiguous()
+    assert "language_instruction" not in batch.keys()
 
 
 # ---------------------------------------------------------------------------

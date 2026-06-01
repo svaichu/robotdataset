@@ -28,6 +28,7 @@ def _build_one_episode(
     global_idx: int,
     episode_dir: Path,
     tf_tensor_types: Tuple[type, ...],
+    load_str_fields: bool = True,
 ) -> int:
     """Convert one episode to TED steps and memmap it to episode_dir.
 
@@ -36,7 +37,12 @@ def _build_one_episode(
 
     Returns the number of steps written.
     """
-    steps = episode_to_ted_steps(episode, global_idx, tf_tensor_types)
+    steps = episode_to_ted_steps(
+        episode,
+        global_idx,
+        tf_tensor_types,
+        load_str_fields=load_str_fields,
+    )
     if not steps:
         return 0
     episode_dir.mkdir(parents=True, exist_ok=True)
@@ -53,6 +59,7 @@ def build_missing_episodes(
     episodes_dir: Path,
     missing: List[int],
     tf_tensor_types: Tuple[type, ...],
+    load_str_fields: bool = True,
 ) -> None:
     """Convert and cache only the episodes in ``missing`` (global indices).
 
@@ -88,7 +95,13 @@ def build_missing_episodes(
             continue
         episode_dir = episodes_dir / str(global_idx)
         if not is_episode_cached(episode_dir):
-            _build_one_episode(episode, global_idx, episode_dir, tf_tensor_types)
+            _build_one_episode(
+                episode,
+                global_idx,
+                episode_dir,
+                tf_tensor_types,
+                load_str_fields=load_str_fields,
+            )
         if pbar is not None:
             pbar.update(1)
 
