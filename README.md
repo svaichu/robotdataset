@@ -13,6 +13,7 @@ A Python package for loading robot learning datasets into [TorchRL](https://gith
 | Dataset | Class | Status |
 |---|---|---|
 | Open X-Embodiment (OXE) | `OXEDataset` | Alpha |
+| Open X-Embodiment (OXE, JAX path) | `OXEJAXDataset` | Alpha |
 | Table30 v2 | `Table30v2Dataset` | In development |
 | AgiBotWorld-Beta | `AgiBotWorldBetaDataset` | In development |
 
@@ -39,6 +40,10 @@ pip install -e ".[oxe]"
 ## OXE Dataset
 
 The OXE loader pulls from the [`gs://gresearch/robotics`](https://console.cloud.google.com/storage/browser/gresearch/robotics) GCS bucket and converts episodes into TorchRL TED format backed by memory-mapped tensors. Downloaded data is cached locally so subsequent runs skip the download.
+
+Example notebooks:
+- Torch path: `example/example_oxe.ipynb`
+- JAX path: `example/example_oxe_jax.ipynb`
 
 ### Discover available datasets
 
