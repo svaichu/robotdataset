@@ -359,6 +359,8 @@ class OXEDataset(BaseDatasetExperienceReplay):
             converted; the full dataset is otherwise used.
         batch_size: Number of transitions returned by ``sample()``.
         root: Override cache root directory.
+        load_str_fields: Whether to include string leaves (e.g. language
+            instructions) in cached/sampled TensorDicts.
     """
 
     def __init__(
@@ -371,6 +373,7 @@ class OXEDataset(BaseDatasetExperienceReplay):
         root: Optional[str] = None,
         delta_timestamps: Optional[Dict[str, List[float]]] = None,
         control_frequency: float = 10.0,
+        load_str_fields: bool = True,
     ) -> None:
         dataset_name = dataset_name.strip("/")
 
@@ -389,6 +392,7 @@ class OXEDataset(BaseDatasetExperienceReplay):
         self.episodes: Optional[List[int]] = list(episodes) if episodes is not None else None
         self.dataset_path = dataset2path(dataset_name, version=version)
         self.root = _get_cache_dir(root)
+        self.load_str_fields = load_str_fields
 
         # ------------------------------------------------------------------
         # 1. Sync metadata JSON files from GCS if not already present
@@ -439,6 +443,7 @@ class OXEDataset(BaseDatasetExperienceReplay):
                 episodes_dir=episodes_dir,
                 missing=missing,
                 tf_tensor_types=_TF_TENSOR_TYPES,
+                load_str_fields=self.load_str_fields,
             )
 
         # ------------------------------------------------------------------
@@ -521,11 +526,17 @@ class OXEDataset(BaseDatasetExperienceReplay):
         return d
 
     def _episodes_dir(self) -> Path:
-        return self._local_tfds_dir() / "episodes" / self.split
+        episodes_dir = self._local_tfds_dir() / "episodes" / self.split
+        if not self.load_str_fields:
+            episodes_dir = episodes_dir / "no_str_fields"
+        return episodes_dir
 
     def _combined_dir(self, selected: List[int]) -> Path:
         key = combined_dir_key(selected)
-        return self._local_tfds_dir() / "combined" / self.split / key
+        combined_dir = self._local_tfds_dir() / "combined" / self.split / key
+        if not self.load_str_fields:
+            combined_dir = combined_dir / "no_str_fields"
+        return combined_dir
 
     def _get_total_episodes(self) -> int:
         """Return total episode count for the current split from builder.info."""
