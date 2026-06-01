@@ -15,6 +15,7 @@ from torchrl.data import ImmutableDatasetWriter, TensorStorage
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 
 from robotdataset._common import _get_cache_dir
+from robotdataset.oxe.episode_nth_second_sampler import EpisodeNthSecondSampler
 from robotdataset.oxe.temporal_sampler import TemporalSampler
 from robotdataset.oxe.bucket import discover_dataset_versions, discover_datasets_from_bucket
 from robotdataset.oxe.memmap_builder import (
