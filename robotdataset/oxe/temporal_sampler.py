@@ -167,7 +167,7 @@ class TemporalSampler(Sampler):
         """Permute HWC → CHW for image tensors: ``(B, T, H, W, C) → (B, T, C, H, W)``."""
         if key_tuple in self.image_keys and data.ndim >= 4:
             perm = (0, 1, data.ndim - 1) + tuple(range(2, data.ndim - 1))
-            return data.permute(*perm)
+            return data.permute(*perm).contiguous()
         return data
 
     # ------------------------------------------------------------------
