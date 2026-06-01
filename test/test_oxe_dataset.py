@@ -219,6 +219,9 @@ def test_episode_to_ted_steps_flat_format() -> None:
 def test_episode_to_ted_steps_without_str_fields() -> None:
     episode = _make_episode(0, n_steps=1)
     steps = episode_to_ted_steps(episode, episode_idx=0, load_str_fields=False)
+    assert steps[0].is_contiguous()
+    assert "observation" in steps[0].keys()
+    assert "action" in steps[0].keys()
     assert "language_instruction" not in steps[0].keys()
 
 
