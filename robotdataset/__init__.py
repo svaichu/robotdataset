@@ -10,6 +10,7 @@ from robotdataset.oxe_dataset import (
     dataset2path,
     list_datasets,
     validate_dataset_name,
+    EpisodeTubeletSampler,
     TemporalSampler,
 )
 try:
@@ -31,6 +32,7 @@ __all__ = [
     'list_datasets',
     'list_agibot_tasks',
     'validate_dataset_name',
+    'EpisodeTubeletSampler',
     'TemporalSampler',
     'JAXTemporalSampler',
     'batchViz',

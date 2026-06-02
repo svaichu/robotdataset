@@ -1,5 +1,7 @@
 # robotdataset
 
+[![Publish to PyPI](https://github.com/svaichu/robotdataset/actions/workflows/publish.yml/badge.svg)](https://github.com/svaichu/robotdataset/actions/workflows/publish.yml)
+
 A Python package for loading robot learning datasets into [TorchRL](https://github.com/pytorch/rl) TED format.
 
 > **Status:** This repository is a collection for multiple robot datasets. Currently **only the OXE loader is functional**. All other dataset loaders (`Table30v2Dataset`, `AgiBotWorldBetaDataset`) are under active development.
