@@ -87,6 +87,7 @@ class EpisodeNthSecondSampler(Sampler):
         storage_td: TensorDict,
         episode_starts: Dict[int, int],
         episode_lengths: Dict[int, int],
+        batch_size: int = 0,
     ) -> TensorDict:
         """Return every nth-second step from one randomly chosen episode.
 
@@ -94,6 +95,9 @@ class EpisodeNthSecondSampler(Sampler):
             storage_td: Flat TED TensorDict of shape ``(total_steps,)``.
             episode_starts: {episode_id: first_flat_index}
             episode_lengths: {episode_id: number_of_steps}
+            batch_size: Accepted for interface compatibility with
+                :class:`TemporalSampler`; ignored here since the returned
+                batch size is determined by the episode length and stride.
 
         Returns:
             TensorDict with ``batch_size=[T_sub]`` containing the selected steps.
