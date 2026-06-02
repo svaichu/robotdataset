@@ -1,49 +1,58 @@
-# WIP: EpisodeNthSecondSampler — Batch Size & Episode-Length Trajectory Design
+# WIP: EpisodeTubeletSampler
 
-## Problem
+## Output shape
 
-`EpisodeNthSecondSampler` returns `floor(ep_len / stride)` steps per call — variable by
-episode. The `ReplayBuffer` machinery expects every sample to return exactly `batch_size`
-elements. Currently `batch_size` is accepted in `__call__` but silently ignored.
-
-## Options considered
-
-| Option | Description | Pro | Con |
-|--------|-------------|-----|-----|
-| Truncate to `batch_size` | Keep first `batch_size` nth-second indices | Fits ReplayBuffer | Loses tail; arbitrary cutoff defeats coarse-sweep intent |
-| `max_steps` cap | New sampler param, ignore `batch_size` | User controls seq len explicitly | Still variable if episode < max_steps |
-| Pad + mask | Pad to `max_steps`, return mask tensor | Fixed size; works for transformers | TED has no canonical mask field; model must handle masking |
-| `batch_size` = num episodes | Sample N episodes, stack with padding | Matches DT/RT-2 style | Same masking problem; breaks ReplayBuffer contract |
-
-## Decision (pending)
-
-- [ ] Add `max_steps: int | None = None` parameter to `EpisodeNthSecondSampler`
-  - If set, truncate nth-second indices to the first `max_steps` frames
-  - Document that this sampler is best used for evaluation/inspection, not i.i.d. training
-- [ ] Keep `batch_size` ignored; document it clearly in docstring
-- [ ] For whole-episode training: recommend `Dataset` + `DataLoader` + `collate_fn` pattern
-  instead of `ReplayBuffer` (see below)
-
-## Recommended pattern for whole-episode training
-
-```python
-class EpisodeDataset(torch.utils.data.Dataset):
-    """One episode per __getitem__, sub-sampled at nth-second intervals."""
-    ...
-
-def collate_episodes(batch):
-    # pad to max_len in this batch, return mask
-    max_len = max(ep.batch_size[0] for ep in batch)
-    ...
-
-loader = DataLoader(EpisodeDataset(...), batch_size=8, collate_fn=collate_episodes)
+```
+(batch_size, tubelet_size, *data_dims)
+     T_ep          T_clip
 ```
 
-This is the right abstraction for transformer-style models (Decision Transformer, RT-2,
-OpenVLA) that consume full episode context.
+- **T_ep = batch_size**: which clip (axis 0)
+- **T_clip = tubelet_size**: frame within clip (axis 1); resets per clip
+- **n**: seconds between consecutive frames *within* a clip (not between clips)
+- stride = `round(n * control_frequency)` steps
 
-## Files affected
+## Clip anchor placement
 
-- `robotdataset/oxe/episode_nth_second_sampler.py` — add `max_steps`, update docstring
-- `doc/OXE.md` — note sampler limitations and recommended use
-- (new) `robotdataset/oxe/episode_dataset.py` — optional whole-episode Dataset wrapper
+All clips come from a single randomly chosen episode.
+
+```
+a_max = ep_len - 1 - (tubelet_size - 1) * stride   # last valid anchor
+
+batch_size == 1  →  anchor = [a_max]               # end segment
+batch_size >= 2  →  anchors evenly spaced from 0 to a_max
+                    anchor[0]   = 0        (episode start)
+                    anchor[-1]  = a_max    (episode end)
+                    anchor[i]   = round(i * a_max / (batch_size - 1))
+```
+
+When `ep_len < tubelet_size * stride` (episode shorter than one clip):
+- `a_max` clamps to 0; frame indices are repeat-padded at end of episode.
+
+## Image keys
+
+HWC → CHW permutation applied after gather:
+`(B, T, H, W, C) → (B, T, C, H, W)`
+
+## Usage
+
+```python
+sampler = EpisodeTubeletSampler(
+    batch_size=8,       # number of clips
+    tubelet_size=16,    # frames per clip
+    n=0.5,              # 0.5 s between frames → stride=5 @ 10 Hz
+    control_frequency=10,
+    image_keys={("observation", "image")},
+)
+dataset.set_sampler(sampler)
+batch = next(iter(dataset))   # shape (8, 16, *data_dims)
+```
+
+## Status
+
+- [x] Design settled (was `EpisodeNthSecondSampler`, renamed to `EpisodeTubeletSampler`)
+- [x] Rename class and file: `episode_nth_second_sampler.py` → `episode_tubelet_sampler.py`
+- [x] Update all imports and `__init__.py` exports
+- [ ] Add unit test: verify anchor[0]=ep_start, anchor[-1]=a_max, batch_size==1 returns end
+- [ ] Add unit test: ep_len < clip span (clamping path)
+
