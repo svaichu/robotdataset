@@ -44,7 +44,12 @@ hf = [
     "huggingface_hub>=0.19.0",
     "Pillow>=9.0",
 ]
+dev = [
+    "pytest>=7.0",
+]
 
+[tool.pytest.ini_options]
+testpaths = ["test"]
 
 [project.urls]
 Homepage = "https://github.com/robotics-action-group/robotdataset"

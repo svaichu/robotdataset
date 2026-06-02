@@ -1,7 +1,7 @@
 """Internal helpers for OXE dataset loading."""
 
 from robotdataset.oxe.bucket import discover_dataset_versions, discover_datasets_from_bucket
-from robotdataset.oxe.episode_nth_second_sampler import EpisodeNthSecondSampler
+from robotdataset.oxe.episode_tubelet_sampler import EpisodeTubeletSampler
 from robotdataset.oxe.temporal_sampler import TemporalSampler
 from robotdataset.oxe.utils import (
     ModalitySpec,
@@ -23,6 +23,6 @@ __all__ = [
     "flatten_structure",
     "discover_dataset_versions",
     "discover_datasets_from_bucket",
-    "EpisodeNthSecondSampler",
+    "EpisodeTubeletSampler",
     "TemporalSampler",
 ]
