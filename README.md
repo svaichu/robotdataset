@@ -50,7 +50,7 @@ batch["observation/image"].shape   # (6, 10, 480, 640, 3) — (B, T, H, W, C)
 batchViz(batch, key="observation/image", fps=8)
 ```
 
-![batchViz output — 6 items from cmu_playing_with_food, observation/image, 10-frame window at 8 fps](doc/batchviz_example.gif)
+![batchViz output — 6 items from cmu_playing_with_food, observation/image, 10-frame window at 8 fps](agent/batchviz_example.gif)
 
 ## Dataset status
 
