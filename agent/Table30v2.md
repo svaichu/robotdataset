@@ -3,7 +3,7 @@ We need a class Table30v2Dataset(torchrl.data.datasets.common.BaseDatasetExperie
 
 REMEMBER AGENT.md is the entrypoint for the agent.
 
-Feature requirements are similar to OXEDataset, doc/OXE.md. Unless explicitly specified otherwise.
+Feature requirements are similar to OXEDataset, agent/OXE.md. Unless explicitly specified otherwise.
 
 This data format is different from OXE dataset, so is its source.
 

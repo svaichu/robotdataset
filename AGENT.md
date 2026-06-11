@@ -3,15 +3,15 @@ The objective to support to multiple sources of data and load them into torchrl 
 
 Features,
 
-1. oxe datasets, doc/OXE.md. This is for loading oxe datasets from gcloud bucket, gs://gresearch/robotics. 
+1. oxe datasets, agent/OXE.md. This is for loading oxe datasets from gcloud bucket, gs://gresearch/robotics. 
 
-2. RoboChallenge/Table30v2, load this dataset from huggingface. doc/Table30v2.md
+2. RoboChallenge/Table30v2, load this dataset from huggingface. agent/Table30v2.md
 
-3. AgiBotWorld-Beta, load this dataset from huggingface. doc/Agibot.md
+3. AgiBotWorld-Beta, load this dataset from huggingface. agent/Agibot.md
 
 4. LIBERO, load this dataset from the modified version openvla/modified_libero_rlds. 
 
-doc directory containes source of truth that agent should follow. you are NEVER to change doc, unless explicitly asked to. 
+agent directory containes source of truth that agent should follow. you are NEVER to change agent directory, unless explicitly asked to. 
 
 Follow good coding practices, make it easy to read and maintain. Since this library is meant for training deeplearning models, it should be efficient and easy to use in training pipelines.
 
