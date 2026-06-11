@@ -74,6 +74,9 @@ datasets do.
 
 ## Common dataset API
 
+> **Only `OXEDataset` is usable today** (alpha, not stable). `Table30v2Dataset`,
+> `AgiBotWorldBetaDataset`, and `OXEJAXDataset` are in development.
+
 The Torch-path dataset classes (`OXEDataset`, `Table30v2Dataset`,
 `AgiBotWorldBetaDataset`) all inherit from TorchRL's
 `BaseDatasetExperienceReplay`, which provides:

@@ -1,5 +1,8 @@
 # OXE Datasets — `OXEDataset`
 
+> **Status: alpha — usable but not stable.** The API works end-to-end but may
+> change without notice between releases.
+
 Loads datasets from the [Open X-Embodiment](https://robotics-transformer-x.github.io/)
 collection hosted on the public GCS bucket `gs://gresearch/robotics`, and exposes
 them as a TorchRL `BaseDatasetExperienceReplay` in TED format.

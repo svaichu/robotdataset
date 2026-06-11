@@ -1,5 +1,7 @@
 # OXE Datasets, JAX Path — `OXEJAXDataset`
 
+> **Status: in development — not ready for use.**
+
 `OXEJAXDataset` mirrors [`OXEDataset`](oxe.md) but produces **JAX arrays** in plain
 nested dicts instead of TorchRL `TensorDict`s. Use it when your training loop is
 written in JAX/Flax.

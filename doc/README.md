@@ -50,10 +50,13 @@ batchViz(batch["observation"]["image"], fps=8)
 
 ## Dataset status
 
+> **Only `OXEDataset` is usable today.** It is in alpha — APIs may change without
+> notice. All other loaders are under active development and not yet ready for use.
+
 | Dataset | Class | Source | Status |
 |---|---|---|---|
-| Open X-Embodiment (OXE) | `OXEDataset` | `gs://gresearch/robotics` | Alpha |
-| Open X-Embodiment (JAX path) | `OXEJAXDataset` | `gs://gresearch/robotics` | Alpha |
+| Open X-Embodiment (OXE) | `OXEDataset` | `gs://gresearch/robotics` | **Alpha (usable, not stable)** |
+| Open X-Embodiment (JAX path) | `OXEJAXDataset` | `gs://gresearch/robotics` | In development |
 | Table30 v2 | `Table30v2Dataset` | `RoboChallenge/Table30v2` (HF) | In development |
 | AgiBotWorld-Beta | `AgiBotWorldBetaDataset` | `agibot-world/AgiBotWorld-Beta` (HF) | In development |
 
