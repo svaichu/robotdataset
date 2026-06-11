@@ -19,43 +19,25 @@ def batchViz(
 ) -> Optional[Union[Image, Video, str]]:
     """Render a batch of video frames as a mosaic GIF or MP4.
 
-    Accepts either a raw tensor or a :class:`TensorDict` produced by
-    :class:`~robotdataset.OXEDataset`.
-
     Args:
-        batch: A ``TensorDict`` from ``OXEDataset.sample()`` **or** a raw
-            tensor.  When a ``TensorDict`` is given, ``key`` selects which
-            modality to visualise (slash-separated path, e.g.
-            ``"observation/image"``).
-        key: Slash-separated key into the batch TensorDict.  Ignored when
-            ``batch`` is already a tensor.
+        batch: Flat TensorDict from ``OXEDataset.sample()`` (keys are
+            ``"/"``-separated strings) **or** a raw tensor.
+        key: ``"/"``-separated key into the batch.  Ignored when ``batch``
+            is already a tensor.
         fps: Frames per second for the output animation.
         is_output_video: ``True`` → write an MP4; ``False`` → write a GIF.
-        embed: Return an IPython display object (``Image`` / ``Video``) for
-            inline notebook rendering.
+        embed: Return an IPython display object for inline notebook rendering.
         file_name: Output file stem (no extension).
-
-    Returns:
-        An IPython ``Image`` or ``Video`` when ``embed=True``, otherwise the
-        output file path string.
 
     Supported tensor layouts (auto-detected):
         * ``(B, T, H, W, C)`` — HWC, default from OXEDataset storage
         * ``(B, T, C, H, W)`` — CHW, produced when ``image_keys`` is set
         * ``(B, C, T, H, W)`` — legacy layout
     """
-    # --- extract tensor from TensorDict ---
-    if isinstance(batch, TensorDict):
-        key_tuple = tuple(key.split("/"))
-        try:
-            video = batch[key_tuple]
-        except KeyError:
-            raise KeyError(
-                f"Key {key!r} not found in batch. "
-                f"Available top-level keys: {sorted(batch.keys())}"
-            )
-    else:
+    if isinstance(batch, torch.Tensor):
         video = batch
+    else:
+        video = batch[key]
 
     if video.ndim != 5:
         raise ValueError(f"Expected 5D tensor (B, T, *, *, *), got shape {tuple(video.shape)}")
@@ -129,30 +111,19 @@ def itemViz(
     """Render the temporal frames of a single batch item as a GIF or MP4.
 
     Args:
-        batch: A ``TensorDict`` from ``OXEDataset.sample()`` or a raw tensor.
+        batch: Flat TensorDict from ``OXEDataset.sample()`` or a raw tensor.
         idx: Which item in the batch to visualise (default ``0``).
-        key: Slash-separated key into the batch TensorDict.  Ignored when
-            ``batch`` is already a tensor.
+        key: ``"/"``-separated key into the batch.  Ignored when ``batch``
+            is already a tensor.
         fps: Frames per second for the output animation.
         is_output_video: ``True`` → write an MP4; ``False`` → write a GIF.
         embed: Return an IPython display object for inline notebook rendering.
         file_name: Output file stem (no extension).
-
-    Returns:
-        An IPython ``Image`` or ``Video`` when ``embed=True``, otherwise the
-        output file path string.
     """
-    if isinstance(batch, TensorDict):
-        key_tuple = tuple(key.split("/"))
-        try:
-            video = batch[key_tuple]
-        except KeyError:
-            raise KeyError(
-                f"Key {key!r} not found in batch. "
-                f"Available top-level keys: {sorted(batch.keys())}"
-            )
-    else:
+    if isinstance(batch, torch.Tensor):
         video = batch
+    else:
+        video = batch[key]
 
     if video.ndim != 5:
         raise ValueError(f"Expected 5D tensor (B, T, *, *, *), got shape {tuple(video.shape)}")

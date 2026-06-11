@@ -9,6 +9,7 @@ from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import Storage
 
 
+
 class TemporalSampler(Sampler):
     """Samples temporally-structured batches from a flat TED storage.
 
@@ -44,7 +45,10 @@ class TemporalSampler(Sampler):
     ) -> None:
         self.delta_timestamps = delta_timestamps
         self.control_frequency = control_frequency
-        self.image_keys = image_keys
+        # Accept "/" strings or tuples; store as tuples for nested storage indexing
+        self.image_keys = {
+            tuple(k.split("/")) if isinstance(k, str) else k for k in image_keys
+        }
         # Pre-compute integer step offsets keyed by tuple path
         self._offsets: Dict[Tuple[str, ...], List[int]] = {
             tuple(k.split("/")): [round(dt * control_frequency) for dt in deltas]
@@ -65,7 +69,7 @@ class TemporalSampler(Sampler):
     def ran_out(self) -> bool:
         return False
 
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[TensorDict, dict]:
+    def sample(self, storage: Storage, batch_size: int) -> Tuple[Dict[str, Any], dict]:
         """Temporal sample called by ReplayBuffer machinery."""
         storage_td: TensorDict = getattr(storage, "_storage", storage)
         starts, lengths = self.build_episode_index(storage_td)
@@ -180,7 +184,7 @@ class TemporalSampler(Sampler):
         episode_starts: Dict[int, int],
         episode_lengths: Dict[int, int],
         batch_size: int,
-    ) -> TensorDict:
+    ) -> Dict[str, Any]:
         """Return a temporally-structured batch of size ``batch_size``.
 
         All modalities in ``delta_timestamps`` are returned with shape
@@ -199,7 +203,7 @@ class TemporalSampler(Sampler):
             batch_size: Number of anchor steps to sample.
 
         Returns:
-            TensorDict with ``batch_size=[batch_size]``.
+            Flat dict mapping ``"/"``-separated string keys to tensors.
         """
         total_steps = storage_td.batch_size[0]
         episode_ids = storage_td["collector", "episode_id"]
@@ -234,4 +238,4 @@ class TemporalSampler(Sampler):
             temporal = self._apply_image_permutation(leaf[idx_tensor], key_tuple)
             batch[("next",) + key_tuple] = temporal
 
-        return batch
+        return batch.flatten_keys("/")

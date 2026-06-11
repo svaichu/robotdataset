@@ -457,6 +457,7 @@ class OXEDataset(BaseDatasetExperienceReplay):
             build_combined_storage(selected, episodes_dir, combined_dir)
         combined_td = TensorDict.load_memmap(str(combined_dir / "data"))
         storage = TensorStorage(combined_td)
+        self._storage_keys: set = set(combined_td.flatten_keys("/").keys())
 
         # ------------------------------------------------------------------
         # 5. Temporal sampler — always active (compulsory per spec).
@@ -471,12 +472,9 @@ class OXEDataset(BaseDatasetExperienceReplay):
         # Image modalities are identified by kind="image" so the sampler can
         # permute them from on-disk HWC → CHW (channels first).
         # ------------------------------------------------------------------
-        # Tensor modalities only (skip text / non-numeric leaves)
-        default_dt: Dict[str, List[float]] = {
-            path: [0.0]
-            for path, spec in self._modalities.items()
-            if spec.get("dtype") is not None and spec.get("kind") != "text"
-        }
+        # Build defaults from actual storage keys — avoids schema/data mismatches
+        # where the TFDS feature spec names differ from what was actually stored.
+        default_dt: Dict[str, List[float]] = {key: [0.0] for key in self._storage_keys}
         # Caller-supplied values take precedence
         effective_dt = {**default_dt, **(delta_timestamps or {})}
 
@@ -572,19 +570,12 @@ class OXEDataset(BaseDatasetExperienceReplay):
         return len(self._loaded_indices)
 
     @property
-    def image_keys(self) -> List[Tuple[str, ...]]:
-        """Tuple-path keys whose tensors are stored as HWC images, sorted for determinism.
-
-        Pass to :class:`TemporalSampler` when you want automatic HWC→CHW
-        permutation::
-
-            sampler = TemporalSampler(..., image_keys=dataset.image_keys)
-            dataset.set_sampler(sampler)
-        """
+    def image_keys(self) -> List[str]:
+        """Slash-separated keys whose tensors are stored as HWC images, sorted for determinism."""
         return sorted(
-            tuple(path.split("/"))
+            path
             for path, spec in self._modalities.items()
-            if spec.get("kind") == "image"
+            if spec.get("kind") == "image" and path in self._storage_keys
         )
 
     @property

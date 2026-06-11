@@ -48,7 +48,10 @@ class EpisodeTubeletSampler(Sampler):
         self.tubelet_size = tubelet_size
         self.n = n
         self.control_frequency = control_frequency
-        self.image_keys = set(image_keys)
+        # Accept "/" strings or tuples; store as tuples for nested storage indexing
+        self.image_keys = {
+            tuple(k.split("/")) if isinstance(k, str) else k for k in image_keys
+        }
         self._stride: int = max(1, round(n * control_frequency))
 
     # ------------------------------------------------------------------
@@ -59,7 +62,7 @@ class EpisodeTubeletSampler(Sampler):
     def ran_out(self) -> bool:
         return False
 
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[TensorDict, dict]:
+    def sample(self, storage: Storage, batch_size: int) -> Tuple[Dict[str, Any], dict]:
         """Called by ReplayBuffer machinery; ``batch_size`` is ignored."""
         storage_td: TensorDict = getattr(storage, "_storage", storage)
         starts, lengths = TemporalSampler.build_episode_index(storage_td)
@@ -95,8 +98,8 @@ class EpisodeTubeletSampler(Sampler):
         episode_starts: Dict[int, int],
         episode_lengths: Dict[int, int],
         batch_size: int = 0,
-    ) -> TensorDict:
-        """Return a ``(batch_size, tubelet_size, *data_dims)`` TensorDict.
+    ) -> Dict[str, Any]:
+        """Return a ``(batch_size, tubelet_size, *data_dims)`` flat dict.
 
         Args:
             storage_td: Flat TED TensorDict of shape ``(total_steps,)``.
@@ -145,4 +148,4 @@ class EpisodeTubeletSampler(Sampler):
                 perm = (0, 1, data.ndim - 1) + tuple(range(2, data.ndim - 1))
                 batch[key_tuple] = data.permute(*perm).contiguous()
 
-        return batch
+        return batch.flatten_keys("/")
