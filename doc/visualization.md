@@ -30,8 +30,8 @@ batch = dataset.sample()
 # Animated GIF mosaic of the whole batch
 batchViz(batch, key="observation/image", fps=8)
 
-# Or pass the tensor directly
-batchViz(batch["observation"]["image"], fps=8)
+# Or pass the tensor directly (flat key since the batch is a flat TensorDict)
+batchViz(batch["observation/image"], fps=8)
 
 # MP4 instead of GIF, saved to my_batch.mp4
 batchViz(batch, fps=10, is_output_video=True, file_name="my_batch")

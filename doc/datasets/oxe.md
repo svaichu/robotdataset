@@ -75,11 +75,15 @@ All steps are idempotent and resumable; interrupted downloads are detected
 
 ```python
 batch = dataset.sample()                  # or: batch = next(iter(dataset))
-batch["observation"]["image"].shape       # (6, 480, 640, 3) — (B, H, W, C), T=1 default
+batch["observation/image"].shape          # (6, 480, 640, 3) — (B, H, W, C), T=1 default
 batch["action"].shape                     # (6, 8)
 batch["language_instruction"]             # NonTensorStack(['Grasp the carrot slice.', ...])
-batch["collector"]["episode_id"]          # which episode each row came from
+batch["collector/episode_id"]             # which episode each row came from
 ```
+
+Batch keys are always **`"/"`-separated strings** — the flat view of the nested TED
+structure.  For example, `"observation/image"`, `"next/observation/image"`,
+`"collector/episode_id"`.
 
 With a temporal window (set in the constructor or via `set_sampler`):
 
@@ -94,8 +98,8 @@ sampler = TemporalSampler(
 dataset.set_sampler(sampler)
 
 batch = dataset.sample()
-batch["observation"]["image"].shape           # (B, 3, C, H, W)
-batch["next"]["observation"]["image"].shape   # (B, 3, C, H, W) — mirrored future window
+batch["observation/image"].shape           # (B, 3, C, H, W)
+batch["next/observation/image"].shape      # (B, 3, C, H, W) — mirrored future window
 ```
 
 ## Inspecting the dataset
@@ -104,7 +108,7 @@ batch["next"]["observation"]["image"].shape   # (B, 3, C, H, W) — mirrored fut
 dataset.num_episodes        # 2
 len(dataset)                # 244 — total steps
 dataset.modalities          # {'image': [...], 'state': [...], 'action': [...], 'text': [...]}
-dataset.image_keys          # [('observation', 'finger_vision_1'), ('observation', 'image'), ...]
+dataset.image_keys          # ['observation/finger_vision_1', 'observation/image', ...]
 dataset.get_modalities()    # raw per-path specs: dtype, shape, kind, source
 dataset.get_dataset_info()  # TFDS description / features / splits
 dataset.data_path           # per-episode memmap dir

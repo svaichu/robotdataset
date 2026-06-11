@@ -39,7 +39,7 @@ each modality listed in `delta_timestamps` at the requested time offsets.
 |---|---|---|
 | `delta_timestamps` | required | `{slash-separated path: [offsets in seconds]}`, e.g. `{"observation/image": [-0.2, -0.1, 0.0]}` |
 | `control_frequency` | `10.0` | Steps per second. Offsets are converted to integer step offsets via `round(dt * control_frequency)` |
-| `image_keys` | `()` | Tuple-paths stored as HWC that should be permuted to CHW after stacking |
+| `image_keys` | `()` | `"/"` -separated string keys (or pass `dataset.image_keys`) whose tensors are stored as HWC and should be permuted to CHW after stacking |
 
 ### Example
 
@@ -59,10 +59,14 @@ sampler = TemporalSampler(
 dataset.set_sampler(sampler)
 
 batch = dataset.sample()
-batch["observation"]["image"].shape   # (B, 10, C, H, W)  — CHW because image_keys set
-batch["observation"]["state"].shape   # (B, 2, state_dim)
-batch["action"].shape                 # (B, 3, action_dim)
+batch["observation/image"].shape   # (B, 10, C, H, W)  — CHW because image_keys set
+batch["observation/state"].shape   # (B, 2, state_dim)
+batch["action"].shape              # (B, 3, action_dim)
 ```
+
+Batch keys are flat `"/"` -separated strings — the sampler calls
+`flatten_keys("/")` before returning, so `batch["observation/image"]` is correct;
+nested access (`batch["observation"]["image"]`) does **not** work.
 
 ### The mirrored `next` window
 
@@ -74,7 +78,7 @@ from the same storage leaf as the observation (using positive step offsets), not
 from the stored TED `next/…` field.
 
 ```python
-batch["next"]["observation"]["image"].shape   # same (B, T, ...) shape, future window
+batch["next/observation/image"].shape   # same (B, T, ...) shape, future window
 ```
 
 Modalities *not* listed in `delta_timestamps` keep their plain anchor shape
@@ -103,7 +107,7 @@ random transitions.
 | `tubelet_size` | Frames per clip |
 | `n` | Seconds between consecutive frames within a clip |
 | `control_frequency` | Steps per second (default `10.0`) |
-| `image_keys` | Tuple-paths to permute HWC → CHW |
+| `image_keys` | `"/"` -separated string keys to permute HWC → CHW |
 
 ### Clip placement
 
@@ -125,7 +129,7 @@ sampler = EpisodeTubeletSampler(
 dataset.set_sampler(sampler)
 
 batch = dataset.sample()                # batch_size arg of the dataset is ignored
-batch["observation"]["image"].shape     # (8, 16, C, H, W)
+batch["observation/image"].shape        # (8, 16, C, H, W)
 ```
 
 Note: the clip count is fixed by the sampler's own `batch_size`; the replay buffer's

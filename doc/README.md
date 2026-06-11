@@ -42,10 +42,10 @@ sampler = TemporalSampler(
 dataset.set_sampler(sampler)
 
 batch = dataset.sample()
-batch["observation"]["image"].shape   # (6, 10, 480, 640, 3) — (B, T, H, W, C)
+batch["observation/image"].shape   # (6, 10, 480, 640, 3) — (B, T, H, W, C)
 
 # Visualize the batch as an animated mosaic
-batchViz(batch["observation"]["image"], fps=8)
+batchViz(batch, key="observation/image", fps=8)
 ```
 
 ## Dataset status

@@ -72,6 +72,13 @@ Because the result is a standard TED `TensorDict`, batches plug directly into
 TorchRL losses, transforms, and replay-buffer tooling, the same way D4RL or Minari
 datasets do.
 
+> **Flat key convention** — the storage is a nested TED TensorDict, but every
+> sampler calls `flatten_keys("/")` before returning.  The batch you get back from
+> `dataset.sample()` is a **flat TensorDict** where all keys are `"/"`-separated
+> strings: `"observation/image"`, `"next/observation/image"`,
+> `"collector/episode_id"`, etc.  Nested access
+> (`batch["observation"]["image"]`) does **not** work on a flat TensorDict.
+
 ## Common dataset API
 
 > **Only `OXEDataset` is usable today** (alpha, not stable). `Table30v2Dataset`,
@@ -94,7 +101,7 @@ Shared members across all dataset classes:
 |---|---|
 | `num_episodes` | Number of episodes loaded |
 | `len(dataset)` | Total steps across loaded episodes |
-| `image_keys` | Tuple-paths of image modalities (for HWC→CHW permutation) |
+| `image_keys` | `"/"` -separated string keys of image modalities (for HWC→CHW permutation) |
 | `modalities` / `get_modalities()` | Modality discovery (paths, kinds, dtypes, shapes) |
 | `set_sampler(sampler)` | Swap the temporal sampler without rebuilding the dataset |
 
