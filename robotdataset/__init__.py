@@ -21,7 +21,7 @@ except Exception:  # pragma: no cover - optional dependency
 from robotdataset.table30v2_dataset import Table30v2Dataset
 from robotdataset.agibot_dataset import AgiBotWorldBetaDataset
 from robotdataset.agibot.loader import list_agibot_tasks
-from robotdataset.utils import batchViz, itemViz
+from robotdataset.utils import batchViz, episodeViz, itemViz
 
 __all__ = [
     'OXEDataset',
@@ -37,6 +37,7 @@ __all__ = [
     'JAXTemporalSampler',
     'batchViz',
     'itemViz',
+    'episodeViz',
 ]
 
 __version__ = '0.1.0'

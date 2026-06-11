@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import imageio
 import numpy as np
@@ -167,4 +167,153 @@ def itemViz(
     else:
         out_path = f"{file_name}.gif"
         imageio.mimsave(out_path, list(frames_u8), fps=fps, loop=0)
+        return Image(filename=out_path) if embed else out_path
+
+
+def episodeViz(
+    dataset: "OXEDataset",  # type: ignore[name-defined]
+    episode_idx: int = 0,
+    key: Optional[Union[str, List[str]]] = None,
+    fps: int = 4,
+    is_output_video: bool = False,
+    embed: bool = True,
+    file_name: str = "episode",
+) -> Optional[Union[Image, Video, str]]:
+    """Render every frame of one episode as an animated GIF or MP4.
+
+    When multiple image keys are requested (or auto-detected from
+    ``dataset.image_keys``), each animation frame is a horizontal strip of
+    all cameras side-by-side in key order.
+
+    Args:
+        dataset: A loaded ``OXEDataset`` instance.
+        episode_idx: 0-based index into ``dataset._loaded_indices``.
+        key: Image key(s) to render.  ``None`` → all ``dataset.image_keys``.
+            Pass a single ``"/"``-separated string or a list of strings to
+            select specific cameras.
+        fps: Frames per second for the output animation.
+        is_output_video: ``True`` → write an MP4; ``False`` → write a GIF.
+        embed: Return an IPython display object for inline notebook rendering.
+        file_name: Output file stem (no extension).
+
+    Returns:
+        IPython ``Image`` or ``Video`` when ``embed=True``; output file path
+        string when ``embed=False``.
+
+    Raises:
+        IndexError: ``episode_idx`` is out of range.
+        ValueError: No image keys found or a key has an unexpected shape.
+    """
+    # ------------------------------------------------------------------ #
+    # 1. Resolve which image keys to render
+    # ------------------------------------------------------------------ #
+    if key is None:
+        keys: List[str] = list(dataset.image_keys)
+        if not keys:
+            raise ValueError(
+                "dataset.image_keys is empty. Pass key= explicitly with the "
+                "slash-separated path to the image modality."
+            )
+    elif isinstance(key, str):
+        keys = [key]
+    else:
+        keys = list(key)
+
+    # ------------------------------------------------------------------ #
+    # 2. Locate the episode in flat storage
+    # ------------------------------------------------------------------ #
+    n_episodes = len(dataset._loaded_indices)
+    if episode_idx >= n_episodes or episode_idx < -n_episodes:
+        raise IndexError(
+            f"episode_idx={episode_idx} out of range for {n_episodes} loaded episode(s)."
+        )
+    episode_id = dataset._loaded_indices[episode_idx % n_episodes]
+    start = dataset._episode_starts[episode_id]
+    length = dataset._episode_lengths[episode_id]
+
+    # Raw flat TensorDict of shape (total_steps,)
+    storage_td = dataset._storage._storage
+    episode_td = storage_td[start : start + length]  # (T,)
+
+    # ------------------------------------------------------------------ #
+    # 3. Extract per-key frame arrays: (T, H, W, 3) uint8
+    # ------------------------------------------------------------------ #
+    per_key_frames: List[np.ndarray] = []
+    for k in keys:
+        parts = tuple(k.split("/"))
+        node = episode_td
+        try:
+            for p in parts:
+                node = node[p]
+        except KeyError:
+            raise KeyError(
+                f"Key '{k}' not found in episode storage. "
+                f"Available top-level keys: {sorted(episode_td.keys())}"
+            )
+
+        arr = node.detach().float().cpu().contiguous().numpy()  # (T, ...)
+        if arr.ndim != 4:
+            raise ValueError(
+                f"Key '{k}' has shape {arr.shape}; expected 4-D (T, H, W, C) "
+                "or (T, C, H, W)."
+            )
+
+        # Normalise to (T, H, W, C)
+        T, d1, d2, d3 = arr.shape
+        if d3 in (1, 3):
+            pass  # already HWC
+        elif d1 in (1, 3):
+            arr = arr.transpose(0, 2, 3, 1)  # CHW → HWC
+        else:
+            raise ValueError(
+                f"Cannot infer channel position from shape {arr.shape} for key '{k}'."
+            )
+
+        if arr.shape[-1] == 1:
+            arr = np.repeat(arr, 3, axis=-1)
+
+        # Per-key percentile normalisation → uint8
+        lo = np.percentile(arr, 1.0, axis=(0, 1, 2), keepdims=True)
+        hi = np.percentile(arr, 99.0, axis=(0, 1, 2), keepdims=True)
+        denom = np.maximum(hi - lo, 1e-6)
+        arr = (((arr - lo) / denom).clip(0.0, 1.0) * 255.0).astype(np.uint8)
+
+        per_key_frames.append(arr)
+
+    # ------------------------------------------------------------------ #
+    # 4. Assemble animation frames
+    #    Single key  → (T, H, W, 3) directly.
+    #    Multi-key   → horizontal strip; height-pad shorter cameras with zeros.
+    # ------------------------------------------------------------------ #
+    T = per_key_frames[0].shape[0]
+
+    if len(per_key_frames) == 1:
+        frames = [per_key_frames[0][t] for t in range(T)]
+    else:
+        max_h = max(arr.shape[1] for arr in per_key_frames)
+        frames = []
+        for t in range(T):
+            strips = []
+            for arr in per_key_frames:
+                frame = arr[t]  # (H, W, 3)
+                h, w = frame.shape[:2]
+                if h < max_h:
+                    pad = np.zeros((max_h - h, w, 3), dtype=np.uint8)
+                    frame = np.vstack([frame, pad])
+                strips.append(frame)
+            frames.append(np.hstack(strips))
+
+    # ------------------------------------------------------------------ #
+    # 5. Write output
+    # ------------------------------------------------------------------ #
+    if is_output_video:
+        out_path = f"{file_name}.mp4"
+        try:
+            imageio.mimsave(out_path, frames, fps=fps)
+        except Exception as e:
+            print(f"MP4 export skipped: {e}")
+        return Video(filename=out_path, embed=True) if embed else out_path
+    else:
+        out_path = f"{file_name}.gif"
+        imageio.mimsave(out_path, frames, fps=fps, loop=0)
         return Image(filename=out_path) if embed else out_path
