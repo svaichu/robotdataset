@@ -17,12 +17,17 @@ use in deep-learning training pipelines.
 | [Table30v2](doc/datasets/table30v2.md) | `Table30v2Dataset` (RoboChallenge/Table30v2, HuggingFace) |
 | [AgiBotWorld-Beta](doc/datasets/agibot.md) | `AgiBotWorldBetaDataset`, `list_agibot_tasks` |
 | [Samplers](doc/samplers.md) | `TemporalSampler`, `EpisodeTubeletSampler`, `JAXTemporalSampler` |
-| [Visualization](doc/visualization.md) | `batchViz`, `itemViz` |
+| [Visualization](doc/visualization.md) | `batchViz`, `itemViz`, `episodeViz` |
 
 ## Quick start
 
 ```bash
-pip install "robotdataset[oxe]"
+# All dataset backends (recommended)
+pip install "robotdataset[all]"
+
+# Or install only what you need:
+pip install "robotdataset[oxe]"   # OXE / GCS datasets (requires TensorFlow)
+pip install "robotdataset[hf]"    # HuggingFace datasets (Table30v2, AgiBotWorld-Beta)
 ```
 
 ```python
@@ -54,15 +59,15 @@ batchViz(batch, key="observation/image", fps=8)
 
 ## Dataset status
 
-> **Only `OXEDataset` is usable today.** It is in alpha — APIs may change without
-> notice. All other loaders are under active development and not yet ready for use.
+All loaders are in **alpha** — APIs may change without notice between releases.
 
 | Dataset | Class | Source | Status |
 |---|---|---|---|
 | Open X-Embodiment (OXE) | `OXEDataset` | `gs://gresearch/robotics` | **Alpha (usable, not stable)** |
-| Open X-Embodiment (JAX path) | `OXEJAXDataset` | `gs://gresearch/robotics` | In development |
-| Table30 v2 | `Table30v2Dataset` | `RoboChallenge/Table30v2` (HF) | In development |
-| AgiBotWorld-Beta | `AgiBotWorldBetaDataset` | `agibot-world/AgiBotWorld-Beta` (HF) | In development |
+| Open X-Embodiment (JAX path) | `OXEJAXDataset` | `gs://gresearch/robotics` | **Alpha (JAX path)** |
+| Table30 v2 | `Table30v2Dataset` | `RoboChallenge/Table30v2` (HF) | **Alpha** |
+| AgiBotWorld-Beta | `AgiBotWorldBetaDataset` | `agibot-world/AgiBotWorld-Beta` (HF) | **Alpha** |
+| LIBERO | — | `openvla/modified_libero_rlds` (HF) | Planned |
 
 ## Public API
 
@@ -77,7 +82,7 @@ from robotdataset import (
     # Discovery helpers
     list_datasets, validate_dataset_name, dataset2path, list_agibot_tasks,
     # Visualization
-    batchViz, itemViz,
+    batchViz, itemViz, episodeViz,
 )
 ```
 

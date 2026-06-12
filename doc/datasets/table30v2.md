@@ -1,6 +1,8 @@
 # Table30 v2 — `Table30v2Dataset`
 
-> **Status: in development.** The API may change.
+> **Status: alpha.** Functional end-to-end; API may change without notice.
+
+**Requires:** `datasets` and `huggingface_hub` (install with `pip install "robotdataset[hf]"`).
 
 Loads the [`RoboChallenge/Table30v2`](https://huggingface.co/datasets/RoboChallenge/Table30v2)
 dataset from HuggingFace Hub and exposes it as a TorchRL
