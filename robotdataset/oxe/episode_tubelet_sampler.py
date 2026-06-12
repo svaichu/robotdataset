@@ -98,8 +98,8 @@ class EpisodeTubeletSampler(Sampler):
         episode_starts: Dict[int, int],
         episode_lengths: Dict[int, int],
         batch_size: int = 0,
-    ) -> Dict[str, Any]:
-        """Return a ``(batch_size, tubelet_size, *data_dims)`` flat dict.
+    ) -> TensorDict:
+        """Return a ``(batch_size, tubelet_size, *data_dims)`` flat TensorDict.
 
         Args:
             storage_td: Flat TED TensorDict of shape ``(total_steps,)``.

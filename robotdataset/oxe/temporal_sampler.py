@@ -184,7 +184,7 @@ class TemporalSampler(Sampler):
         episode_starts: Dict[int, int],
         episode_lengths: Dict[int, int],
         batch_size: int,
-    ) -> Dict[str, Any]:
+    ) -> TensorDict:
         """Return a temporally-structured batch of size ``batch_size``.
 
         All modalities in ``delta_timestamps`` are returned with shape
@@ -203,7 +203,8 @@ class TemporalSampler(Sampler):
             batch_size: Number of anchor steps to sample.
 
         Returns:
-            Flat dict mapping ``"/"``-separated string keys to tensors.
+            Flat TensorDict with ``"/"``-separated string keys and temporal
+            modalities having shape ``(B, T, ...)``.
         """
         total_steps = storage_td.batch_size[0]
         episode_ids = storage_td["collector", "episode_id"]
