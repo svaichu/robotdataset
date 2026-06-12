@@ -134,10 +134,15 @@ class Table30v2Dataset(BaseDatasetExperienceReplay):
         #    Default: {every_tensor_modality: [0.0]} (T=1 anchor-only).
         #    Images are auto-permuted from on-disk HWC to CHW.
         # ------------------------------------------------------------------
+        _EXCLUDED_PREFIXES = ("next/", "collector/")
+        _EXCLUDED_KEYS = {"done", "terminated"}
         default_dt: Dict[str, List[float]] = {
             path: [0.0]
             for path, spec in self.modalities.items()
-            if spec.get("dtype") is not None and spec.get("kind") != "text"
+            if spec.get("dtype") is not None
+            and spec.get("kind") != "text"
+            and not any(path.startswith(p) for p in _EXCLUDED_PREFIXES)
+            and path not in _EXCLUDED_KEYS
         }
         effective_dt = {**default_dt, **(delta_timestamps or {})}
 
