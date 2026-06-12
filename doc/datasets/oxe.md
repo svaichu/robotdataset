@@ -116,3 +116,108 @@ dataset.data_path_root      # dataset cache root
 ```
 
 Example notebook: [`example/example_oxe.ipynb`](../../example/example_oxe.ipynb)
+
+## Troubleshooting: GCS access on HPC clusters (e.g. RWTH)
+
+`list_datasets()` and `OXEDataset` access the public GCS bucket
+`gs://gresearch/robotics` via TensorFlow's GCS client, which requires valid
+Google credentials and a working SSL CA bundle.  Two separate issues can arise
+on HPC clusters.
+
+### Issue 1 — no Google credentials
+
+**Symptom:**
+```
+All attempts to get a Google authentication bearer token failed …
+Retrieving token from files failed with "NOT_FOUND: Could not locate the credentials file."
+```
+
+**Fix:** authenticate with `gcloud` using the device flow (no browser needed on
+the cluster):
+
+```bash
+gcloud auth application-default login --no-browser
+```
+
+This prints a URL.  Open it in a browser on your laptop, log in with any Google
+account (a personal Gmail works — the bucket is public), and paste the
+authorization code back into the cluster terminal.  Credentials are saved to
+`~/.config/gcloud/application_default_credentials.json` and picked up
+automatically.
+
+---
+
+### Issue 2 — SSL CA bundle not found
+
+**Symptom** (appears after credentials are present):
+```
+libcurl code 77 … error setting certificate verify locations:
+  CAfile: /etc/ssl/certs/ca-certificates.crt  CApath: none
+```
+
+The libcurl bundled with TensorFlow looks for CA certificates at a Debian path
+that does not exist on RHEL/CentOS-based clusters like RWTH.
+
+**Fix:** find the correct path and set the environment variable:
+
+```bash
+# On RWTH / RHEL-based systems the bundle is usually here:
+ls /etc/pki/tls/certs/ca-bundle.crt
+
+# If not found, use the certifi bundle (always present in a Python venv):
+python3 -c "import certifi; print(certifi.where())"
+```
+
+Then export:
+
+```bash
+export CURL_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
+export REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
+```
+
+**Option A — terminal / interactive session (quickest):**
+Add both exports to `~/.bashrc` so every new shell picks them up.
+
+**Option B — SLURM job script (recommended for batch jobs and Jupyter):**
+Add the exports to the script that launches your Jupyter server or training job,
+before the `jupyter notebook` / `python` line.  The kernel inherits the
+environment from the SLURM job, so this is the most reliable method.
+
+```bash
+#!/bin/bash
+#SBATCH ...
+export CURL_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
+export REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
+jupyter notebook --no-browser --port=8888
+```
+
+**Option C — inside the notebook (always works as a fallback):**
+Set the variables programmatically as the very first cell, before any import
+that triggers GCS access:
+
+```python
+import os
+os.environ["CURL_CA_BUNDLE"] = "/etc/pki/tls/certs/ca-bundle.crt"
+os.environ["REQUESTS_CA_BUNDLE"] = "/etc/pki/tls/certs/ca-bundle.crt"
+
+import robotdataset
+robotdataset.list_datasets()
+```
+
+**Option D — `kernel.json` env block:**
+Locate the active kernel spec with `jupyter kernelspec list` and edit its
+`kernel.json` to add an `"env"` section:
+
+```json
+{
+  "argv": ["python3", "-m", "ipykernel_launcher", "-f", "{connection_file}"],
+  "display_name": "Python 3",
+  "env": {
+    "CURL_CA_BUNDLE": "/etc/pki/tls/certs/ca-bundle.crt",
+    "REQUESTS_CA_BUNDLE": "/etc/pki/tls/certs/ca-bundle.crt"
+  }
+}
+```
+
+Restart the kernel after saving.  Note: on SLURM-launched Jupyter sessions the
+job environment takes precedence, so Option B is more reliable than this one.
