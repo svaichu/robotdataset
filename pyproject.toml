@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "robotdataset"
-version = "0.1.4"
+version = "0.1.5"
 description = "A TorchRL wrapper for robot learning datasets."
 authors = [
     { name = "Vaishnavahari Seenivasan", email = "vaishnavahari.seenivasan@rwth-aachen.de" }
@@ -45,6 +45,13 @@ hf = [
 ]
 dev = [
     "pytest>=7.0",
+]
+all = [
+    "tensorflow>=2.11.1",
+    "tensorflow-datasets>=4.8.2",
+    "datasets>=2.14.0",
+    "huggingface_hub>=0.19.0",
+    "Pillow>=9.0",
 ]
 
 [tool.setuptools.packages.find]
