@@ -77,9 +77,9 @@ def _progress(
 
 def _require_tf_stack() -> None:
     if tf is None or tfds is None:
-        raise RuntimeError(
+        raise ImportError(
             "OXEDataset requires tensorflow and tensorflow-datasets. "
-            "Install those packages to load OXE datasets."
+            "Install them with: pip install 'robotdataset[oxe]'"
         )
 
 
