@@ -5,6 +5,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
+import torch
+
 try:
     from tqdm.auto import tqdm as _tqdm_cls
 except ImportError:
@@ -456,7 +458,12 @@ class OXEDataset(BaseDatasetExperienceReplay):
         if not is_combined_complete(combined_dir):
             build_combined_storage(selected, episodes_dir, combined_dir)
         combined_td = TensorDict.load_memmap(str(combined_dir / "data"))
+        # Ensure nested key structure — some tensordict versions may load memmaps
+        # with flat "a/b" keys instead of nested sub-TensorDicts.
+        combined_td = combined_td.unflatten_keys("/")
         storage = TensorStorage(combined_td)
+        _flat_combined = combined_td.flatten_keys("/")
+        self._storage_keys: set = set(_flat_combined.keys())
 
         # ------------------------------------------------------------------
         # 5. Temporal sampler — always active (compulsory per spec).
@@ -464,18 +471,24 @@ class OXEDataset(BaseDatasetExperienceReplay):
         #    buffer's sampler and satisfy the Sampler ABC contract.
         #
         # Effective delta_timestamps:
-        #   • Start with {key: [0.0]} for every tensor modality (T=1, just
-        #     the anchor step).  This satisfies the "default is 0 for all
-        #     modalities" requirement.
+        #   • Start with {key: [0.0]} for every *tensor* modality (T=1, just
+        #     the anchor step).  Non-tensor leaves (e.g. language_instruction
+        #     stored as NonTensorStack) are excluded — they can't be indexed
+        #     with a 2-D index tensor.
         #   • Caller-supplied delta_timestamps overrides per-key.
         # Image modalities are identified by kind="image" so the sampler can
         # permute them from on-disk HWC → CHW (channels first).
         # ------------------------------------------------------------------
-        # Tensor modalities only (skip text / non-numeric leaves)
+        # Build defaults for "data" modalities only — exclude system/next-step
+        # fields that should not have a temporal dimension.
+        _EXCLUDED_PREFIXES = ("next/", "collector/")
+        _EXCLUDED_KEYS = {"done", "terminated"}
         default_dt: Dict[str, List[float]] = {
-            path: [0.0]
-            for path, spec in self._modalities.items()
-            if spec.get("dtype") is not None and spec.get("kind") != "text"
+            key: [0.0]
+            for key in self._storage_keys
+            if isinstance(_flat_combined.get(key), torch.Tensor)
+            and not any(key.startswith(p) for p in _EXCLUDED_PREFIXES)
+            and key not in _EXCLUDED_KEYS
         }
         # Caller-supplied values take precedence
         effective_dt = {**default_dt, **(delta_timestamps or {})}
@@ -572,19 +585,12 @@ class OXEDataset(BaseDatasetExperienceReplay):
         return len(self._loaded_indices)
 
     @property
-    def image_keys(self) -> List[Tuple[str, ...]]:
-        """Tuple-path keys whose tensors are stored as HWC images, sorted for determinism.
-
-        Pass to :class:`TemporalSampler` when you want automatic HWC→CHW
-        permutation::
-
-            sampler = TemporalSampler(..., image_keys=dataset.image_keys)
-            dataset.set_sampler(sampler)
-        """
+    def image_keys(self) -> List[str]:
+        """Slash-separated keys whose tensors are stored as HWC images, sorted for determinism."""
         return sorted(
-            tuple(path.split("/"))
+            path
             for path, spec in self._modalities.items()
-            if spec.get("kind") == "image"
+            if spec.get("kind") == "image" and path in self._storage_keys
         )
 
     @property

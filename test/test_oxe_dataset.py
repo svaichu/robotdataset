@@ -250,7 +250,8 @@ def test_dataset_path_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
 # Cache dir
 # ---------------------------------------------------------------------------
 
-def test_get_cache_dir_default() -> None:
+def test_get_cache_dir_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ROBOTDATASET_CACHE", raising=False)
     path = oxe._get_cache_dir()
     assert str(path).endswith(".cache/robotdataset")
 
@@ -295,12 +296,11 @@ def test_sample_has_ted_keys(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     _patch(monkeypatch)
     ds = oxe.OXEDataset(dataset_name="droid", split="train", batch_size=2, root=str(tmp_path))
     batch = ds.sample()
-    assert "observation" in batch.keys()
+    assert "observation/image" in batch.keys()
     assert "action" in batch.keys()
     assert "done" in batch.keys()
-    assert "next" in batch.keys()
-    assert "observation" in batch["next"].keys()
-    assert "reward" in batch["next"].keys()
+    assert "next/observation/image" in batch.keys()
+    assert "next/reward" in batch.keys()
 
 
 def test_sample_action_is_tensor(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -317,8 +317,8 @@ def test_sample_observation_image(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     _patch(monkeypatch)
     ds = oxe.OXEDataset(dataset_name="droid", split="train", batch_size=2, root=str(tmp_path))
     batch = ds.sample()
-    assert batch["observation", "image"].shape == (2, 1, 3, 8, 8)  # (B, T=1, C, H, W)
-    assert batch["observation", "image"].dtype == torch.uint8
+    assert batch["observation/image"].shape == (2, 1, 3, 8, 8)  # (B, T=1, C, H, W)
+    assert batch["observation/image"].dtype == torch.uint8
 
 
 def test_sample_without_str_fields_is_contiguous(
@@ -644,7 +644,7 @@ def test_temporal_sampler_anchor_only(monkeypatch: pytest.MonkeyPatch, tmp_path:
     )
     batch = ds.sample()
     # Image: (B, T=1, C=3, H=8, W=8) — channels first
-    assert batch["observation", "image"].shape == (4, 1, 3, 8, 8)
+    assert batch["observation/image"].shape == (4, 1, 3, 8, 8)
     # Action not overridden → default T=1 from effective_dt
     assert batch["action"].shape == (4, 1, 2)
 
@@ -663,8 +663,8 @@ def test_temporal_sampler_multi_offset_image(monkeypatch: pytest.MonkeyPatch, tm
     )
     batch = ds.sample()
     # (B, T=3, C=3, H=8, W=8) — channels first per spec
-    assert batch["observation", "image"].shape == (4, 3, 3, 8, 8)
-    assert batch["observation", "image"].dtype == torch.uint8
+    assert batch["observation/image"].shape == (4, 3, 3, 8, 8)
+    assert batch["observation/image"].dtype == torch.uint8
 
 
 def test_temporal_sampler_multi_modality(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -684,7 +684,7 @@ def test_temporal_sampler_multi_modality(monkeypatch: pytest.MonkeyPatch, tmp_pa
     )
     batch = ds.sample()
     # Image: (B, T=3, C=3, H=8, W=8)
-    assert batch["observation", "image"].shape == (4, 3, 3, 8, 8)
+    assert batch["observation/image"].shape == (4, 3, 3, 8, 8)
     # Action: (B, T=2, action_dim=2)
     assert batch["action"].shape == (4, 2, 2)
 
@@ -711,7 +711,7 @@ def test_temporal_sampler_boundary_clamping(monkeypatch: pytest.MonkeyPatch, tmp
     # Force anchor to the very first step of episode 0
     episode_ids = storage_td["collector", "episode_id"]
     ep_id = int(episode_ids[0].item())
-    first_step_state = storage_td["observation", "state"][0]
+    first_step_state = storage_td["observation"]["state"][0]
 
     # Sample 8 anchors — all must have their t=0 slot equal to the first-step state
     import torch as _torch
@@ -719,7 +719,7 @@ def test_temporal_sampler_boundary_clamping(monkeypatch: pytest.MonkeyPatch, tmp
     result = sampler(storage_td, {ep_id: 0}, {ep_id: lengths[ep_id]}, batch_size=1)
     # The -0.5s offset (-5 steps) must have been clamped to step 0
     # We verify by checking shape only (value depends on random anchor)
-    assert result["observation", "state"].shape == (1, 2, 4)
+    assert result["observation/state"].shape == (1, 2, 4)
 
 
 def test_temporal_sampler_default_is_t1_for_all_modalities(
@@ -739,7 +739,7 @@ def test_temporal_sampler_default_is_t1_for_all_modalities(
     batch = ds.sample()
     # Temporal dim T=1 always present; image is channels-first (B, T, C, H, W)
     assert batch["action"].shape == (4, 1, 2)          # (B, T=1, action_dim)
-    assert batch["observation", "image"].shape == (4, 1, 3, 8, 8)  # (B, T=1, C, H, W)
+    assert batch["observation/image"].shape == (4, 1, 3, 8, 8)  # (B, T=1, C, H, W)
 
 
 # ---------------------------------------------------------------------------
@@ -763,10 +763,10 @@ def test_next_field_temporal_shape(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     )
     batch = ds.sample()
     # obs: (B, T=3, C, H, W)
-    assert batch["observation", "image"].shape == (4, 3, 3, 8, 8)
+    assert batch["observation/image"].shape == (4, 3, 3, 8, 8)
     # next mirrors T=3, also channels-first
-    assert batch["next", "observation", "image"].shape == (4, 3, 3, 8, 8)
-    assert batch["next", "observation", "state"].shape == (4, 3, 4)
+    assert batch["next/observation/image"].shape == (4, 3, 3, 8, 8)
+    assert batch["next/observation/state"].shape == (4, 3, 4)
 
 
 def test_next_field_default_t1(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -780,8 +780,8 @@ def test_next_field_default_t1(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
         root=str(tmp_path),
     )
     batch = ds.sample()
-    assert batch["next", "observation", "image"].shape == (4, 1, 3, 8, 8)
-    assert batch["next", "observation", "state"].shape == (4, 1, 4)
+    assert batch["next/observation/image"].shape == (4, 1, 3, 8, 8)
+    assert batch["next/observation/state"].shape == (4, 1, 4)
 
 
 def test_next_field_mirrored_values() -> None:

@@ -254,12 +254,11 @@ def test_sample_has_ted_keys(monkeypatch, tmp_path):
         tasks=[TASK_A], cameras=CAMERAS, batch_size=2, root=str(tmp_path)
     )
     batch = ds.sample()
-    assert "observation" in batch.keys()
+    assert "observation/head_color" in batch.keys()
     assert "action" in batch.keys()
     assert "done" in batch.keys()
-    assert "next" in batch.keys()
-    assert "observation" in batch["next"].keys()
-    assert "reward" in batch["next"].keys()
+    assert "next/observation/head_color" in batch.keys()
+    assert "next/reward" in batch.keys()
 
 
 def test_sample_camera_shape_channels_first(monkeypatch, tmp_path):
@@ -269,7 +268,7 @@ def test_sample_camera_shape_channels_first(monkeypatch, tmp_path):
         tasks=[TASK_A], cameras=CAMERAS, batch_size=3, root=str(tmp_path)
     )
     batch = ds.sample()
-    img = batch["observation", "head_color"]
+    img = batch["observation/head_color"]
     assert img.shape == (3, 1, 3, H, W)
     assert img.dtype == torch.uint8
 
@@ -281,7 +280,7 @@ def test_sample_all_cameras_present(monkeypatch, tmp_path):
     )
     batch = ds.sample()
     for cam in CAMERAS:
-        assert cam in batch["observation"].keys(), f"Camera {cam!r} missing from batch"
+        assert f"observation/{cam}" in batch.keys(), f"Camera {cam!r} missing from batch"
 
 
 def test_action_is_zero_placeholder(monkeypatch, tmp_path):
@@ -312,7 +311,7 @@ def test_temporal_sampler_multi_offset(monkeypatch, tmp_path):
         control_frequency=30.0,
     )
     batch = ds.sample()
-    assert batch["observation", "head_color"].shape == (4, 3, 3, H, W)
+    assert batch["observation/head_color"].shape == (4, 3, 3, H, W)
 
 
 def test_set_sampler(monkeypatch, tmp_path):
@@ -330,7 +329,7 @@ def test_set_sampler(monkeypatch, tmp_path):
     )
     ds.set_sampler(new_sampler)
     batch = ds.sample()
-    assert batch["observation", "head_color"].shape == (2, 2, 3, H, W)
+    assert batch["observation/head_color"].shape == (2, 2, 3, H, W)
 
 
 # ---------------------------------------------------------------------------
