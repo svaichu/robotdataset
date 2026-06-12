@@ -62,9 +62,14 @@ default_dt = {
 | `test-oxe` | `test_oxe_dataset.py` | `.[oxe]` |
 | `test-oxe-jax` | `test_oxe_jax_dataset.py` | `.[oxe]` + jax |
 
-Jobs always run on push/PR. When manually dispatched, each job checks its corresponding input (`run_agibot`, `run_hf`, `run_oxe`, `run_oxe_jax`) — set to false to skip it.
+The `if:` condition differs by whether the job's default is `true` or `false`:
 
-When adding a new Dataset class: add a matching job, install only its required extras, and add a `workflow_dispatch` boolean input for it.
+- **Default `true`** (e.g. `test-oxe`): `if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_oxe }}` — runs on every push/PR, and on manual dispatch when enabled.
+- **Default `false`** (e.g. `test-agibot`, `test-hf`, `test-oxe-jax`): `if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_X }}` — explicitly requires a manual dispatch AND the input to be true. On push/PR the first clause is false so the job is skipped.
+
+The pattern `github.event_name != 'workflow_dispatch' || inputs.X` does NOT respect `default: false` on push/PR — the first clause short-circuits to `true`. Use AND with `== 'workflow_dispatch'` to make the intent explicit and correct.
+
+When adding a new Dataset class: add a matching job, install only its required extras, add a `workflow_dispatch` boolean input, and pick the right `if:` pattern based on whether it should run by default on push/PR.
 
 ---
 

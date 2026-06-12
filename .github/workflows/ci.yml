@@ -26,7 +26,7 @@ on:
 
 jobs:
   test-agibot:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_agibot }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_agibot }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -51,7 +51,7 @@ jobs:
         run: pytest test/test_agibot_dataset.py -v
 
   test-hf:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_hf }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_hf }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -101,7 +101,7 @@ jobs:
         run: pytest test/test_oxe_dataset.py -v
 
   test-oxe-jax:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_oxe_jax }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_oxe_jax }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
