@@ -1,6 +1,9 @@
 # AgiBotWorld-Beta — `AgiBotWorldBetaDataset`
 
-> **Status: in development.** The API may change.
+> **Status: alpha.** Functional end-to-end; API may change without notice.
+
+**Requires:** `huggingface_hub`, `Pillow`, and a video backend (`torchcodec` or `av`).
+Install with `pip install "robotdataset[hf]"`, then add your preferred video library.
 
 Loads the [`agibot-world/AgiBotWorld-Beta`](https://huggingface.co/datasets/agibot-world/AgiBotWorld-Beta)
 dataset from HuggingFace Hub. The source data is structured as TAR archives
