@@ -250,7 +250,8 @@ def test_dataset_path_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
 # Cache dir
 # ---------------------------------------------------------------------------
 
-def test_get_cache_dir_default() -> None:
+def test_get_cache_dir_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ROBOTDATASET_CACHE", raising=False)
     path = oxe._get_cache_dir()
     assert str(path).endswith(".cache/robotdataset")
 
