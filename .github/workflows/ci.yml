@@ -5,9 +5,53 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_agibot:
+        description: "Run test-agibot job"
+        type: boolean
+        default: false
+      run_hf:
+        description: "Run test-hf job (Table30v2Dataset)"
+        type: boolean
+        default: false
+      run_oxe:
+        description: "Run test-oxe job (OXEDataset)"
+        type: boolean
+        default: true
+      run_oxe_jax:
+        description: "Run test-oxe-jax job (OXEJAXDataset)"
+        type: boolean
+        default: false
 
 jobs:
-  test:
+  test-agibot:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_agibot }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install tensordict torchrl numpy tqdm pytest
+          pip install -e .
+
+      - name: Run AgiBotWorldBetaDataset tests
+        run: pytest test/test_agibot_dataset.py -v
+
+  test-hf:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_hf }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -28,10 +72,11 @@ jobs:
           pip install tensordict torchrl numpy tqdm pytest
           pip install -e ".[hf]"
 
-      - name: Run tests
-        run: pytest test/ -v --ignore=test/test_oxe_dataset.py
+      - name: Run Table30v2Dataset tests
+        run: pytest test/test_table30v2_dataset.py -v
 
   test-oxe:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_oxe }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -52,5 +97,31 @@ jobs:
           pip install tensordict torchrl numpy tqdm pytest
           pip install -e ".[oxe]"
 
-      - name: Run OXE tests
+      - name: Run OXEDataset tests
         run: pytest test/test_oxe_dataset.py -v
+
+  test-oxe-jax:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_oxe_jax }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install tensordict torchrl numpy tqdm pytest
+          pip install jax jaxlib
+          pip install -e ".[oxe]"
+
+      - name: Run OXEJAXDataset tests
+        run: pytest test/test_oxe_jax_dataset.py -v
