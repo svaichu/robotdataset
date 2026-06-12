@@ -230,12 +230,11 @@ def test_sample_has_ted_keys(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     _patch(monkeypatch)
     ds = t30.Table30v2Dataset(split="train", batch_size=2, root=str(tmp_path))
     batch = ds.sample()
-    assert "observation" in batch.keys()
+    assert "observation/image" in batch.keys()
     assert "action" in batch.keys()
     assert "done" in batch.keys()
-    assert "next" in batch.keys()
-    assert "observation" in batch["next"].keys()
-    assert "reward" in batch["next"].keys()
+    assert "next/observation/image" in batch.keys()
+    assert "next/reward" in batch.keys()
 
 
 def test_sample_action_shape(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -253,8 +252,8 @@ def test_sample_image_channels_first(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     ds = t30.Table30v2Dataset(split="train", batch_size=2, root=str(tmp_path))
     batch = ds.sample()
     # Stored as HWC (8, 8, 3), sampled as CHW (3, 8, 8)
-    assert batch["observation", "image"].shape == (2, 1, 3, 8, 8)
-    assert batch["observation", "image"].dtype == torch.uint8
+    assert batch["observation/image"].shape == (2, 1, 3, 8, 8)
+    assert batch["observation/image"].dtype == torch.uint8
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +404,7 @@ def test_temporal_sampler_default_t1(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     ds = t30.Table30v2Dataset(split="train", episodes=[0, 1, 2], batch_size=4, root=str(tmp_path))
     batch = ds.sample()
     assert batch["action"].shape == (4, 1, 2)
-    assert batch["observation", "image"].shape == (4, 1, 3, 8, 8)
+    assert batch["observation/image"].shape == (4, 1, 3, 8, 8)
 
 
 def test_temporal_sampler_multi_offset(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -420,8 +419,8 @@ def test_temporal_sampler_multi_offset(monkeypatch: pytest.MonkeyPatch, tmp_path
         control_frequency=10.0,
     )
     batch = ds.sample()
-    assert batch["observation", "image"].shape == (4, 3, 3, 8, 8)
-    assert batch["observation", "image"].dtype == torch.uint8
+    assert batch["observation/image"].shape == (4, 3, 3, 8, 8)
+    assert batch["observation/image"].dtype == torch.uint8
 
 
 def test_set_sampler(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
