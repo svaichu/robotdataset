@@ -44,6 +44,14 @@ def _episode_id_column(features: Any) -> str:
     )
 
 
+def _maybe_episode_id_column(features: Any) -> Optional[str]:
+    """Find episode ID column, returning None when absent."""
+    for col in _EPISODE_ID_COLUMNS:
+        if col in features:
+            return col
+    return None
+
+
 def _task_id_column(features: Any) -> Optional[str]:
     """Return the column name used for task IDs, or None if not present."""
     for col in _TASK_ID_COLUMNS:
@@ -104,7 +112,12 @@ def filter_by_tasks(hf_dataset: Any, tasks: List[int]) -> "_FilteredDataset":
     return _FilteredDataset(hf_dataset, frozenset(tasks))
 
 
-def load_hf_dataset(dataset_name: str, split: str, cache_dir: Optional[Path] = None) -> Any:
+def load_hf_dataset(
+    dataset_name: str,
+    split: str,
+    cache_dir: Optional[Path] = None,
+    config_name: Optional[str] = None,
+) -> Any:
     """Load a HuggingFace dataset for the given split.
 
     The datasets library handles download and caching internally.
@@ -115,13 +128,21 @@ def load_hf_dataset(dataset_name: str, split: str, cache_dir: Optional[Path] = N
     kwargs: Dict[str, Any] = {}
     if cache_dir is not None:
         kwargs["cache_dir"] = str(cache_dir / "hf_cache")
+    if config_name is not None:
+        return datasets.load_dataset(dataset_name, config_name, split=split, **kwargs)
     return datasets.load_dataset(dataset_name, split=split, **kwargs)
 
 
 def get_episode_ids(hf_dataset: Any) -> List[int]:
-    """Return sorted unique episode IDs present in the dataset."""
-    col = _episode_id_column(hf_dataset.features)
-    return sorted(set(hf_dataset[col]))
+    """Return sorted unique episode IDs present in the dataset.
+
+    If no explicit episode-ID column exists, each row is treated as one episode
+    and IDs are inferred from row indices.
+    """
+    col = _maybe_episode_id_column(hf_dataset.features)
+    if col is not None:
+        return sorted(set(hf_dataset[col]))
+    return list(range(len(hf_dataset)))
 
 
 def _convert_leaf(val: Any) -> Any:
@@ -169,6 +190,17 @@ def _convert_leaf(val: Any) -> Any:
     return val
 
 
+def _convert_tree(val: Any) -> Any:
+    """Recursively convert nested HF values to torch-friendly objects."""
+    if isinstance(val, dict):
+        return {k: _convert_tree(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [_convert_tree(v) for v in val]
+    if isinstance(val, tuple):
+        return tuple(_convert_tree(v) for v in val)
+    return _convert_leaf(val)
+
+
 def _to_nested(flat: Dict[str, Any]) -> Dict[str, Any]:
     """Reconstruct a nested dict from dot-separated flat keys.
 
@@ -199,7 +231,7 @@ def hf_episode_to_oxe_format(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     steps = []
     for row in rows:
-        converted = {k: _convert_leaf(v) for k, v in row.items()}
+        converted = {k: _convert_tree(v) for k, v in row.items()}
         nested = _to_nested(converted)
 
         # Lift LeRobot-style "next" sub-dict to OXE top-level field names
@@ -217,6 +249,24 @@ def hf_episode_to_oxe_format(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
 
         steps.append(nested)
     return {"steps": steps}
+
+
+def hf_row_to_oxe_episode(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert one HF row representing an entire episode to OXE-like format.
+
+    Preferred schema is ``{"steps": [step_dict, ...]}``. If ``steps`` is
+    absent, the row is treated as a single-step episode.
+    """
+    converted = _convert_tree(dict(row))
+    if "steps" in converted:
+        steps = converted["steps"]
+        if not isinstance(steps, list):
+            raise ValueError(
+                "Unsupported episode row format: 'steps' must be a list of step dictionaries. "
+                f"Got type={type(steps).__name__}, value={steps!r}."
+            )
+        return {"steps": steps}
+    return {"steps": [converted]}
 
 
 def infer_modalities_from_storage(td: Any) -> Dict[str, Dict[str, Any]]:
