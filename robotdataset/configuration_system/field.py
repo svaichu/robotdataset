@@ -27,36 +27,47 @@ def infer_type(value: Any) -> str:
 class FieldSpec:
     """Learned metadata for a single config field.
 
-    `bounds`/`values` are only populated for fields declared as
-    hyperparameters (e.g. `{type: float, bounds: {min: 1e-5, max: 1e-2}}`),
-    which is what makes a field eligible for W&B sweep export.
+    `type` and `default` are the required subfields: every field ends up
+    with both, inferred from a plain YAML/JSON value if the file didn't
+    spell them out explicitly.
+
+    `bounds`/`values` are the hyperparameter opt settings that make a
+    field eligible for W&B sweep export. The source file may declare them
+    directly, but they are typically attached afterward via
+    `Config.set_bounds`/`Config.set_values`.
     """
 
     name: str
     type: str
+    default: Any
     bounds: Optional[dict] = None
     values: Optional[list] = None
-    default: Any = None
 
     def is_sweepable(self) -> bool:
         return self.bounds is not None or self.values is not None
 
     @classmethod
     def from_spec_dict(cls, name: str, spec: dict) -> "FieldSpec":
+        bounds = spec.get("bounds")
+        values = spec.get("values")
+        default = spec.get("default")
+        if default is None:
+            if bounds is not None and "min" in bounds:
+                default = bounds["min"]
+            elif values:
+                default = values[0]
         return cls(
             name=name,
-            type=spec.get("type", "str"),
-            bounds=spec.get("bounds"),
-            values=spec.get("values"),
-            default=spec.get("default"),
+            type=spec.get("type", infer_type(default) if default is not None else "str"),
+            default=default,
+            bounds=bounds,
+            values=values,
         )
 
     def to_dict(self) -> dict:
-        out: dict = {"type": self.type}
+        out: dict = {"type": self.type, "default": self.default}
         if self.bounds is not None:
             out["bounds"] = self.bounds
         if self.values is not None:
             out["values"] = self.values
-        if self.default is not None:
-            out["default"] = self.default
         return out

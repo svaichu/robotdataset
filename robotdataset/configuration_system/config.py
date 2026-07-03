@@ -6,10 +6,15 @@
     cfg = Config()
     cfg.dataset(name="oxe", batch_size=32).training(learning_rate=1e-4)
 
-Loading a YAML/JSON file teaches the config its groups, field names and
-types, and any hyperparameter bounds/values needed for W&B sweep export::
+Loading a YAML/JSON file teaches the config its groups, field names, and
+each field's `type`/`default`. The file doesn't need to carry any
+hyperparameter opt info (`bounds`/`values`) — that's typically attached
+afterward via `set_bounds`/`set_values`, which is what makes a field
+eligible for W&B sweep export::
 
     cfg = Config.from_file("config.yaml")
+    cfg.set_bounds("training", "learning_rate", min=1e-5, max=1e-2)
+    cfg.set_values("training", "optimizer", ["adam", "sgd"])
     cfg.to_sweep_file("sweep.yaml", method="bayes", metric={"name": "loss", "goal": "minimize"})
 """
 
@@ -65,13 +70,41 @@ class Config:
             self._set_field(group, name, value)
 
     def _set_field(self, group: str, field: str, value: Any) -> None:
-        if isinstance(value, dict) and "type" in value and ("bounds" in value or "values" in value):
+        if isinstance(value, dict) and "type" in value:
             spec = FieldSpec.from_spec_dict(field, value)
             self._schema[group][field] = spec
-            self._groups[group][field] = spec.default if spec.default is not None else value
+            self._groups[group][field] = spec.default
         else:
-            self._schema[group][field] = FieldSpec(name=field, type=infer_type(value))
+            self._schema[group][field] = FieldSpec(name=field, type=infer_type(value), default=value)
             self._groups[group][field] = value
+
+    def _require_field(self, group: str, field: str) -> FieldSpec:
+        try:
+            return self._schema[group][field]
+        except KeyError:
+            raise KeyError(
+                f"Unknown field '{group}.{field}'; load it from a file or set it first"
+            ) from None
+
+    # -- hyperparameter opt settings --------------------------------------
+
+    def set_bounds(self, group: str, field: str, min: Any = None, max: Any = None, **extra: Any) -> "Config":
+        """Attach a continuous search range to an already-known field."""
+        spec = self._require_field(group, field)
+        bounds: dict = {}
+        if min is not None:
+            bounds["min"] = min
+        if max is not None:
+            bounds["max"] = max
+        bounds.update(extra)
+        spec.bounds = bounds
+        return self
+
+    def set_values(self, group: str, field: str, values: list) -> "Config":
+        """Attach a discrete/categorical set of candidate values to a field."""
+        spec = self._require_field(group, field)
+        spec.values = list(values)
+        return self
 
     # -- loading ----------------------------------------------------------
 
