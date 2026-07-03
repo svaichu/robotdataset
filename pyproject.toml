@@ -31,10 +31,12 @@ dependencies = [
     "torchrl>=0.2.0",
     "tqdm>=4.64.0",
     "imageio[ffmpeg]",
-    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
+config = [
+    "pyyaml>=6.0",
+]
 oxe = [
     "tensorflow>=2.11.1",
     "tensorflow-datasets>=4.8.2",

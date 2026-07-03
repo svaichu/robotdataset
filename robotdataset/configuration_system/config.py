@@ -24,12 +24,22 @@ import json
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import yaml
-
 from .field import FieldSpec, infer_type
 from .group import Group
 
 PathLike = Union[str, Path]
+
+
+def _require_yaml():
+    """Import pyyaml lazily so plain dict/JSON config use needs no extra deps."""
+    try:
+        import yaml
+    except ImportError as exc:
+        raise ImportError(
+            "YAML config support requires pyyaml. Install it with "
+            "'pip install robotdataset[config]' or 'pip install pyyaml'."
+        ) from exc
+    return yaml
 
 
 class Config:
@@ -119,6 +129,7 @@ class Config:
 
     @classmethod
     def from_yaml(cls, path: PathLike) -> "Config":
+        yaml = _require_yaml()
         with open(path) as f:
             data = yaml.safe_load(f) or {}
         return cls.from_dict(data)
@@ -155,6 +166,7 @@ class Config:
     def save(self, path: PathLike) -> None:
         path = Path(path)
         if path.suffix in (".yaml", ".yml"):
+            yaml = _require_yaml()
             with open(path, "w") as f:
                 yaml.safe_dump(self.to_dict(), f, sort_keys=False)
         elif path.suffix == ".json":
@@ -203,6 +215,7 @@ class Config:
         metric: Optional[dict] = None,
         groups: Optional[list[str]] = None,
     ) -> None:
+        yaml = _require_yaml()
         sweep_config = self.to_sweep(method=method, metric=metric, groups=groups)
         with open(path, "w") as f:
             yaml.safe_dump(sweep_config, f, sort_keys=False)
