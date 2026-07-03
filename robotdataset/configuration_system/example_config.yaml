@@ -1,0 +1,16 @@
+dataset:
+  name: oxe
+  batch_size: 32
+  shuffle: true
+
+training:
+  learning_rate:
+    type: float
+    bounds:
+      min: 1.0e-5
+      max: 1.0e-2
+    default: 1.0e-4
+  optimizer:
+    type: str
+    values: ["adam", "sgd", "adamw"]
+  num_epochs: 100

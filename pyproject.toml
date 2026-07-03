@@ -31,6 +31,7 @@ dependencies = [
     "torchrl>=0.2.0",
     "tqdm>=4.64.0",
     "imageio[ffmpeg]",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
