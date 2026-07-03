@@ -11,6 +11,8 @@ Features,
 
 4. LIBERO, load this dataset from the modified version openvla/modified_libero_rlds. 
 
+5. Config.md, an independent config system for worldmodel and VLA training.
+
 agent directory containes source of truth that agent should follow. you are NEVER to change agent directory, unless explicitly asked to. 
 
 Follow good coding practices, make it easy to read and maintain. Since this library is meant for training deeplearning models, it should be efficient and easy to use in training pipelines.
