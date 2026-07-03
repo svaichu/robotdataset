@@ -7,6 +7,10 @@ from robotdataset.configuration_system import Config, FieldSpec
 
 def test_fluent_builder_chains_and_learns_types():
     cfg = Config()
+    cfg.define("dataset", "name", default="oxe")
+    cfg.define("dataset", "batch_size", default=0)
+    cfg.define("training", "learning_rate", default=0.0)
+    cfg.define("training", "shuffle", default=False)
     cfg.dataset(name="oxe", batch_size=32).training(learning_rate=1e-4, shuffle=True)
 
     assert cfg.groups() == ["dataset", "training"]
@@ -62,6 +66,7 @@ def test_from_json_roundtrip(tmp_path):
 
 def test_save_and_reload_round_trips(tmp_path):
     cfg = Config()
+    cfg.define("training", "learning_rate", default=1e-4, type="float")
     cfg.training(learning_rate={"type": "float", "bounds": {"min": 1e-5, "max": 1e-2}})
     out_path = tmp_path / "out.yaml"
     cfg.save(out_path)
@@ -72,6 +77,9 @@ def test_save_and_reload_round_trips(tmp_path):
 
 def test_to_sweep_maps_bounds_values_and_fixed_fields():
     cfg = Config()
+    cfg.define("training", "learning_rate", default=1e-4, type="float")
+    cfg.define("training", "optimizer", default="adam", type="str")
+    cfg.define("training", "num_epochs", default=100, type="int")
     cfg.training(
         learning_rate={"type": "float", "bounds": {"min": 1e-5, "max": 1e-2}},
         optimizer={"type": "str", "values": ["adam", "sgd"]},
@@ -89,6 +97,7 @@ def test_to_sweep_maps_bounds_values_and_fixed_fields():
 
 def test_to_sweep_file_writes_yaml(tmp_path):
     cfg = Config()
+    cfg.define("training", "learning_rate", default=1e-4, type="float")
     cfg.training(learning_rate={"type": "float", "bounds": {"min": 1e-5, "max": 1e-2}})
     sweep_path = tmp_path / "sweep.yaml"
     cfg.to_sweep_file(sweep_path)
@@ -102,6 +111,7 @@ def test_to_sweep_file_writes_yaml(tmp_path):
 
 def test_group_attribute_access_raises_for_unknown_field():
     cfg = Config()
+    cfg.define("dataset", "name", default="oxe")
     cfg.dataset(name="oxe")
     with pytest.raises(AttributeError):
         cfg.dataset.missing_field
@@ -154,6 +164,8 @@ training:
 
 def test_group_level_set_bounds_and_set_values(tmp_path):
     cfg = Config()
+    cfg.define("training", "learning_rate", default=1e-4, type="float")
+    cfg.define("training", "optimizer", default="adam", type="str")
     cfg.training(learning_rate=1e-4, optimizer="adam")
 
     cfg.training.set_bounds("learning_rate", min=1e-5, max=1e-2)
@@ -165,6 +177,30 @@ def test_group_level_set_bounds_and_set_values(tmp_path):
 
 def test_set_bounds_raises_for_unknown_field():
     cfg = Config()
+    cfg.define("training", "learning_rate", default=1e-4, type="float")
     cfg.training(learning_rate=1e-4)
     with pytest.raises(KeyError):
         cfg.set_bounds("training", "missing_field", min=0, max=1)
+
+
+def test_calling_unknown_group_raises_and_names_it():
+    cfg = Config()
+    with pytest.raises(AttributeError, match="Unknown group 'training'"):
+        cfg.training(learning_rate=1e-4)
+
+
+def test_setting_unknown_field_on_known_group_raises_and_names_it():
+    cfg = Config()
+    cfg.define("training", "learning_rate", default=1e-4, type="float")
+    with pytest.raises(KeyError, match="Unknown field 'training.optimizer'"):
+        cfg.training(optimizer="adam")
+
+
+def test_define_then_set_does_not_reset_default():
+    cfg = Config()
+    cfg.define("training", "learning_rate", default=1e-4, type="float")
+    cfg.training(learning_rate=5e-4)
+
+    spec = cfg.schema("training", "learning_rate")
+    assert cfg.training.learning_rate == 5e-4
+    assert spec.default == 1e-4
