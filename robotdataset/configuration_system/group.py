@@ -21,14 +21,15 @@ class Group:
         object.__setattr__(self, "_config", config)
 
     def __call__(self, **fields: Any) -> "Config":
-        self._config._update_group(self._name, fields)
+        self._config._update_group_strict(self._name, fields)
         return self._config
 
     def __getattr__(self, field: str) -> Any:
         fields = self._config._groups.get(self._name, {})
         if field not in fields:
             raise AttributeError(
-                f"Group '{self._name}' has no field '{field}'"
+                f"Unknown field '{self._name}.{field}'; define it with "
+                f"Config.define('{self._name}', '{field}', ...) or load it from a file first"
             )
         return fields[field]
 

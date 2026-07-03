@@ -1,10 +1,15 @@
 """Fluent, self-learning config builder for WorldModel/VLA training.
 
 `Config` groups fields under top-level categories (e.g. `dataset`,
-`training`) and generates group methods dynamically:
+`training`) and generates group methods dynamically. A group/field must
+exist — either loaded from a file or explicitly registered with
+`define()` — before it can be set through the fluent API; setting an
+unknown group or field raises rather than silently creating it::
 
     cfg = Config()
-    cfg.dataset(name="oxe", batch_size=32).training(learning_rate=1e-4)
+    cfg.define("dataset", "name", default="oxe")
+    cfg.define("dataset", "batch_size", default=32)
+    cfg.dataset(name="oxe", batch_size=32)
 
 Loading a YAML/JSON file teaches the config its groups, field names, and
 each field's `type`/`default`. The file doesn't need to carry any
@@ -24,12 +29,22 @@ import json
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import yaml
-
 from .field import FieldSpec, infer_type
 from .group import Group
 
 PathLike = Union[str, Path]
+
+
+def _require_yaml():
+    """Import pyyaml lazily so plain dict/JSON config use needs no extra deps."""
+    try:
+        import yaml
+    except ImportError as exc:
+        raise ImportError(
+            "YAML config support requires pyyaml. Install it with "
+            "'pip install robotdataset[config]' or 'pip install pyyaml'."
+        ) from exc
+    return yaml
 
 
 class Config:
@@ -44,13 +59,18 @@ class Config:
     def __getattr__(self, name: str) -> Group:
         if name.startswith("_"):
             raise AttributeError(name)
+        if name not in self._groups:
+            raise AttributeError(
+                f"Unknown group '{name}'; define it with Config.define('{name}', ...) "
+                f"or load it from a file first"
+            )
         return Group(name, self)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name.startswith("_"):
             object.__setattr__(self, name, value)
         else:
-            self._update_group(name, value if isinstance(value, dict) else {"value": value})
+            self._update_group_strict(name, value if isinstance(value, dict) else {"value": value})
 
     def groups(self) -> list[str]:
         return list(self._groups.keys())
@@ -61,7 +81,16 @@ class Config:
     def schema(self, group: str, field: str) -> Optional[FieldSpec]:
         return self._schema.get(group, {}).get(field)
 
-    # -- internal learning ----------------------------------------------------
+    # -- explicit registration ------------------------------------------------
+
+    def define(self, group: str, field: str, default: Any = None, type: Optional[str] = None, **extra: Any) -> "Config":
+        """Register a new field (creating its group if needed) so it can be set via the fluent API."""
+        ftype = type if type is not None else (infer_type(default) if default is not None else "str")
+        spec_dict: dict = {"type": ftype, "default": default, **extra}
+        self._update_group(group, {field: spec_dict})
+        return self
+
+    # -- internal learning (used when loading files / defining fields) --------
 
     def _update_group(self, group: str, fields: dict) -> None:
         self._groups.setdefault(group, {})
@@ -78,12 +107,37 @@ class Config:
             self._schema[group][field] = FieldSpec(name=field, type=infer_type(value), default=value)
             self._groups[group][field] = value
 
+    # -- internal strict updates (used by the fluent group API) ---------------
+
+    def _update_group_strict(self, group: str, fields: dict) -> None:
+        if group not in self._groups:
+            raise KeyError(
+                f"Unknown group '{group}'; define it with Config.define('{group}', ...) "
+                f"or load it from a file first"
+            )
+        for name, value in fields.items():
+            self._set_field_strict(group, name, value)
+
+    def _set_field_strict(self, group: str, field: str, value: Any) -> None:
+        if field not in self._schema.get(group, {}):
+            raise KeyError(
+                f"Unknown field '{group}.{field}'; define it with "
+                f"Config.define('{group}', '{field}', ...) or load it from a file first"
+            )
+        if isinstance(value, dict) and "type" in value:
+            spec = FieldSpec.from_spec_dict(field, value)
+            self._schema[group][field] = spec
+            self._groups[group][field] = spec.default
+        else:
+            self._groups[group][field] = value
+
     def _require_field(self, group: str, field: str) -> FieldSpec:
         try:
             return self._schema[group][field]
         except KeyError:
             raise KeyError(
-                f"Unknown field '{group}.{field}'; load it from a file or set it first"
+                f"Unknown field '{group}.{field}'; define it with "
+                f"Config.define('{group}', '{field}', ...) or load it from a file first"
             ) from None
 
     # -- hyperparameter opt settings --------------------------------------
@@ -119,6 +173,7 @@ class Config:
 
     @classmethod
     def from_yaml(cls, path: PathLike) -> "Config":
+        yaml = _require_yaml()
         with open(path) as f:
             data = yaml.safe_load(f) or {}
         return cls.from_dict(data)
@@ -155,6 +210,7 @@ class Config:
     def save(self, path: PathLike) -> None:
         path = Path(path)
         if path.suffix in (".yaml", ".yml"):
+            yaml = _require_yaml()
             with open(path, "w") as f:
                 yaml.safe_dump(self.to_dict(), f, sort_keys=False)
         elif path.suffix == ".json":
@@ -203,6 +259,7 @@ class Config:
         metric: Optional[dict] = None,
         groups: Optional[list[str]] = None,
     ) -> None:
+        yaml = _require_yaml()
         sweep_config = self.to_sweep(method=method, metric=metric, groups=groups)
         with open(path, "w") as f:
             yaml.safe_dump(sweep_config, f, sort_keys=False)
@@ -227,10 +284,13 @@ class Config:
                         for k, v in (("bounds", spec.bounds), ("values", spec.values))
                         if v is not None
                     )
-                    lines.append(f"    {name}: {spec.type} [{extra}]")
+                    lines.append(
+                        f"    {name}: {spec.type} [{extra}] (default={spec.default!r})"
+                    )
                 else:
                     ftype = spec.type if spec is not None else infer_type(value)
-                    lines.append(f"    {name}: {value!r} ({ftype})")
+                    default = spec.default if spec is not None else value
+                    lines.append(f"    {name}: {value!r} ({ftype}, default={default!r})")
         return "\n".join(lines)
 
     def __eq__(self, other: object) -> bool:
