@@ -177,7 +177,28 @@ class Config:
     # -- misc -----------------------------------------------------------
 
     def __repr__(self) -> str:
-        return f"Config({self.to_dict()!r})"
+        if not self._groups:
+            return "Config()"
+
+        lines = ["Config"]
+        for group, fields in self._groups.items():
+            lines.append(f"  {group}:")
+            if not fields:
+                lines.append("    (empty)")
+                continue
+            for name, value in fields.items():
+                spec = self._schema[group].get(name)
+                if spec is not None and spec.is_sweepable():
+                    extra = ", ".join(
+                        f"{k}={v}"
+                        for k, v in (("bounds", spec.bounds), ("values", spec.values))
+                        if v is not None
+                    )
+                    lines.append(f"    {name}: {spec.type} [{extra}]")
+                else:
+                    ftype = spec.type if spec is not None else infer_type(value)
+                    lines.append(f"    {name}: {value!r} ({ftype})")
+        return "\n".join(lines)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Config):
