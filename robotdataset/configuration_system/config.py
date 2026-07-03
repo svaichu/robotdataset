@@ -227,10 +227,13 @@ class Config:
                         for k, v in (("bounds", spec.bounds), ("values", spec.values))
                         if v is not None
                     )
-                    lines.append(f"    {name}: {spec.type} [{extra}]")
+                    lines.append(
+                        f"    {name}: {spec.type} [{extra}] (default={spec.default!r})"
+                    )
                 else:
                     ftype = spec.type if spec is not None else infer_type(value)
-                    lines.append(f"    {name}: {value!r} ({ftype})")
+                    default = spec.default if spec is not None else value
+                    lines.append(f"    {name}: {value!r} ({ftype}, default={default!r})")
         return "\n".join(lines)
 
     def __eq__(self, other: object) -> bool:
