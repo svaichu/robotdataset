@@ -196,6 +196,22 @@ def test_setting_unknown_field_on_known_group_raises_and_names_it():
         cfg.training(optimizer="adam")
 
 
+def test_group_attribute_assignment_updates_config():
+    cfg = Config()
+    cfg.define("dataset", "name", default="oxe")
+    cfg.dataset.name = "lalala"
+
+    assert cfg.dataset.name == "lalala"
+    assert cfg.schema("dataset", "name").default == "oxe"
+
+
+def test_group_attribute_assignment_raises_for_unknown_field():
+    cfg = Config()
+    cfg.define("dataset", "name", default="oxe")
+    with pytest.raises(KeyError, match="Unknown field 'dataset.missing_field'"):
+        cfg.dataset.missing_field = "x"
+
+
 def test_define_then_set_does_not_reset_default():
     cfg = Config()
     cfg.define("training", "learning_rate", default=1e-4, type="float")
