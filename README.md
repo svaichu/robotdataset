@@ -18,6 +18,7 @@ use in deep-learning training pipelines.
 | [AgiBotWorld-Beta](doc/datasets/agibot.md) | `AgiBotWorldBetaDataset`, `list_agibot_tasks` |
 | [Samplers](doc/samplers.md) | `TemporalSampler`, `EpisodeTubeletSampler`, `JAXTemporalSampler` |
 | [Visualization](doc/visualization.md) | `batchViz`, `itemViz`, `episodeViz` |
+| [Config](doc/config.md) | `Config` — fluent config builder, YAML/JSON loading, W&B sweep export |
 
 ## Quick start
 
@@ -83,6 +84,8 @@ from robotdataset import (
     list_datasets, validate_dataset_name, dataset2path, list_agibot_tasks,
     # Visualization
     batchViz, itemViz, episodeViz,
+    # Config
+    Config, FieldSpec,
 )
 ```
 
