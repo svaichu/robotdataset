@@ -24,12 +24,6 @@ class Group:
         self._config._update_group_strict(self._name, fields)
         return self._config
 
-    def __setattr__(self, field: str, value: Any) -> None:
-        if field.startswith("_"):
-            object.__setattr__(self, field, value)
-        else:
-            self._config._update_group_strict(self._name, {field: value})
-
     def __getattr__(self, field: str) -> Any:
         fields = self._config._groups.get(self._name, {})
         if field not in fields:
