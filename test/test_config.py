@@ -212,6 +212,20 @@ def test_group_attribute_assignment_raises_for_unknown_field():
         cfg.dataset.missing_field = "x"
 
 
+def test_save_preserves_current_value_for_sweepable_fields(tmp_path):
+    cfg = Config()
+    cfg.define("training", "learning_rate", default=1e-4, type="float")
+    cfg.training(learning_rate=5e-4)
+    cfg.set_bounds("training", "learning_rate", min=1e-5, max=1e-2)
+
+    assert cfg.to_dict()["training"]["learning_rate"]["default"] == 5e-4
+
+    out_path = tmp_path / "out.yaml"
+    cfg.save(out_path)
+    reloaded = Config.from_yaml(out_path)
+    assert reloaded.training.learning_rate == 5e-4
+
+
 def test_define_then_set_does_not_reset_default():
     cfg = Config()
     cfg.define("training", "learning_rate", default=1e-4, type="float")
