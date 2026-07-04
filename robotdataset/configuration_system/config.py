@@ -202,7 +202,9 @@ class Config:
             for field, value in fields.items():
                 spec = self._schema[group].get(field)
                 if spec is not None and spec.is_sweepable():
-                    out[group][field] = spec.to_dict()
+                    field_dict = spec.to_dict()
+                    field_dict["default"] = value
+                    out[group][field] = field_dict
                 else:
                     out[group][field] = value
         return out
