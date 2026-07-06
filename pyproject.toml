@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "robotdataset"
-version = "0.1.5"
+version = "0.2.3"
 description = "A TorchRL wrapper for robot learning datasets."
 authors = [
     { name = "Vaishnavahari Seenivasan", email = "vaishnavahari.seenivasan@rwth-aachen.de" }
