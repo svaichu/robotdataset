@@ -33,8 +33,14 @@ class Group:
             )
         return fields[field]
 
+    def __setattr__(self, field: str, value: Any) -> None:
+        self._config._update_group_strict(self._name, {field: value})
+
     def __getitem__(self, field: str) -> Any:
         return self._config._groups[self._name][field]
+
+    def __setitem__(self, field: str, value: Any) -> None:
+        self._config._update_group_strict(self._name, {field: value})
 
     def __contains__(self, field: str) -> bool:
         return field in self._config._groups.get(self._name, {})
