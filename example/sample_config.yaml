@@ -1,0 +1,9 @@
+dataset:
+  name: oxe
+  batch_size: 32
+  shuffle: true
+
+training:
+  learning_rate: 1.0e-4
+  optimizer: torch.optim.Adam
+  num_epochs: 100
