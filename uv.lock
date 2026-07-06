@@ -3178,14 +3178,13 @@ wheels = [
 
 [[package]]
 name = "robotdataset"
-version = "0.1.5"
+version = "0.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "imageio", extra = ["ffmpeg"] },
     { name = "ipykernel" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "pyyaml" },
     { name = "tensordict" },
     { name = "torch" },
     { name = "torchrl" },
@@ -3199,6 +3198,9 @@ all = [
     { name = "pillow" },
     { name = "tensorflow" },
     { name = "tensorflow-datasets" },
+]
+config = [
+    { name = "pyyaml" },
 ]
 dev = [
     { name = "pytest" },
@@ -3225,7 +3227,7 @@ requires-dist = [
     { name = "pillow", marker = "extra == 'all'", specifier = ">=9.0" },
     { name = "pillow", marker = "extra == 'hf'", specifier = ">=9.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "pyyaml", marker = "extra == 'config'", specifier = ">=6.0" },
     { name = "tensordict", specifier = ">=0.2.1" },
     { name = "tensorflow", marker = "extra == 'all'", specifier = ">=2.11.1" },
     { name = "tensorflow", marker = "extra == 'oxe'", specifier = ">=2.11.1" },
@@ -3235,7 +3237,7 @@ requires-dist = [
     { name = "torchrl", specifier = ">=0.2.0" },
     { name = "tqdm", specifier = ">=4.64.0" },
 ]
-provides-extras = ["oxe", "hf", "dev", "all"]
+provides-extras = ["config", "oxe", "hf", "dev", "all"]
 
 [[package]]
 name = "setuptools"
