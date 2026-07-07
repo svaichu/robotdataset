@@ -116,6 +116,11 @@ export uses, so a `wandb agent` command line
 Precedence is **defaults < config file < CLI**: options the user didn't pass
 keep their config values.
 
+Runnable examples: [`example/train_cli_example.py`](../example/train_cli_example.py)
+(`Config.from_cli()` loading a YAML file) and
+[`example/train_cli_programmatic_example.py`](../example/train_cli_programmatic_example.py)
+(`add_argument()` building the schema entirely in Python).
+
 The one-liner for a train script is `Config.from_cli()`, which handles
 `--config <file>` plus overrides:
 
