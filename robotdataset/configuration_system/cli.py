@@ -80,6 +80,33 @@ def converter_for(spec: "FieldSpec") -> Callable[[str], Any]:
     return _CONVERTERS.get(spec.type, str)
 
 
+_TYPE_NAME_ALIASES: dict[type, str] = {
+    int: "int",
+    float: "float",
+    str: "str",
+    bool: "bool",
+    list: "list",
+    dict: "dict",
+}
+
+
+def normalize_type(type_: Union[str, type, None]) -> Optional[str]:
+    """Map a Python type (as passed to `add_argument`) to its schema type name.
+
+    Accepts the schema's own string names (`"float"`) unchanged, so callers
+    can mix `add_argument(..., type=float)` with `define(..., type="float")`.
+    """
+    if type_ is None or isinstance(type_, str):
+        return type_
+    try:
+        return _TYPE_NAME_ALIASES[type_]
+    except (KeyError, TypeError):
+        raise TypeError(
+            f"Unsupported type {type_!r} for add_argument; pass one of "
+            "int, float, str, bool, list, dict (or their string names)"
+        ) from None
+
+
 def add_config_arguments(
     cfg: "Config",
     parser: argparse.ArgumentParser,
@@ -105,7 +132,7 @@ def add_config_arguments(
                 "type": converter_for(spec),
                 "default": argparse.SUPPRESS,
                 "dest": key,
-                "help": f"({spec.type}) default: {current!r}",
+                "help": spec.help if spec.help else f"({spec.type}) default: {current!r}",
             }
             if spec.type == "bool":
                 kwargs["nargs"] = "?"

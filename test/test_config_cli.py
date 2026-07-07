@@ -183,3 +183,100 @@ def test_schema_defaults_survive_cli_overrides(tmp_path):
     spec = cfg.schema("training", "learning_rate")
     assert spec.default == 1e-4  # file default preserved; only the value changes
     assert cfg.training.learning_rate == 1e-3
+
+
+# -- Config-owned parser / add_argument ------------------------------------
+
+
+def test_config_owns_parser_from_construction():
+    cfg = Config(description="Train a policy")
+    assert isinstance(cfg.parser, argparse.ArgumentParser)
+    assert cfg.parser.description == "Train a policy"
+
+
+def test_add_argument_registers_field_and_cli_option():
+    cfg = Config()
+    cfg.add_argument("dataset.name", default="oxe")
+    cfg.add_argument("training.learning_rate", default=1e-4, type=float)
+
+    assert cfg.dataset.name == "oxe"
+    assert cfg.schema("training", "learning_rate").type == "float"
+
+    cfg.parse_args(["--training.learning_rate", "1e-3"])
+    assert cfg.training.learning_rate == 1e-3
+
+
+def test_add_argument_accepts_python_types():
+    cfg = Config()
+    cfg.add_argument("dataset.batch_size", default=32, type=int)
+    cfg.add_argument("training.shuffle", default=True, type=bool)
+    cfg.add_argument("dataset.cameras", default=["front"], type=list)
+
+    assert cfg.schema("dataset", "batch_size").type == "int"
+    assert cfg.schema("training", "shuffle").type == "bool"
+    assert cfg.schema("dataset", "cameras").type == "list"
+
+
+def test_add_argument_strips_leading_dashes():
+    cfg = Config()
+    cfg.add_argument("--dataset.name", default="oxe")
+    assert cfg.dataset.name == "oxe"
+    assert "--dataset.name" in cfg.parser.format_help()
+
+
+def test_add_argument_requires_dotted_name():
+    cfg = Config()
+    with pytest.raises(ValueError, match="group.field"):
+        cfg.add_argument("name", default="oxe")
+
+
+def test_add_argument_choices_become_argparse_choices():
+    cfg = Config()
+    cfg.add_argument("training.optimizer", default="adam", choices=["adam", "sgd"])
+    assert cfg.schema("training", "optimizer").values == ["adam", "sgd"]
+
+    cfg.parse_args(["--training.optimizer", "sgd"])
+    assert cfg.training.optimizer == "sgd"
+
+    with pytest.raises(SystemExit):
+        cfg.parse_args(["--training.optimizer", "rmsprop"])
+
+
+def test_add_argument_custom_help_shown_in_parser():
+    cfg = Config()
+    cfg.add_argument("training.learning_rate", default=1e-4, type=float, help="peak LR")
+    assert "peak LR" in cfg.parser.format_help()
+
+
+def test_parse_args_uses_internal_parser_without_add_arguments(tmp_path):
+    cfg, _ = make_cfg(tmp_path)
+    # No cfg.add_arguments(...) call needed: from_yaml already synced cfg.parser.
+    cfg.parse_args(["--training.learning_rate", "2e-3"])
+    assert cfg.training.learning_rate == 2e-3
+
+
+def test_internal_parser_resyncs_after_set_bounds_and_set_values(tmp_path):
+    cfg, _ = make_cfg(tmp_path)
+    cfg.set_values("training", "optimizer", ["adam", "sgd"])
+
+    with pytest.raises(SystemExit):
+        cfg.parse_args(["--training.optimizer", "rmsprop"])
+
+    cfg.parse_args(["--training.optimizer", "sgd"])
+    assert cfg.training.optimizer == "sgd"
+
+
+def test_add_argument_mixes_with_fluent_api():
+    cfg = Config()
+    cfg.add_argument("dataset.name", default="oxe")
+    cfg.dataset(name="libero")
+    assert cfg.dataset.name == "libero"
+
+
+def test_external_parser_still_supported_alongside_internal_default(tmp_path):
+    cfg, _ = make_cfg(tmp_path)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run-name", default="run0")
+
+    cfg.parse_args(["--run-name", "exp1", "--training.num_epochs", "5"], parser=parser)
+    assert cfg.training.num_epochs == 5

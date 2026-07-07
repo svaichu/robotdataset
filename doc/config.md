@@ -146,8 +146,36 @@ A field with `values` set becomes an argparse `choices` option, so passing a
 value outside the set is rejected at parse time. Overriding a field never
 touches its schema `default` — only the current value changes.
 
-To compose with an existing parser (script-level flags alongside config
-overrides), use the lower-level pieces:
+### Building a config straight from argparse-style calls
+
+A `Config` owns its own `argparse.ArgumentParser` from the moment it's
+constructed (`cfg.parser`), and keeps it in sync with the schema as fields
+are added. `add_argument()` mirrors `argparse.ArgumentParser.add_argument`
+but takes a dotted `"group.field"` name, so it registers the field *and*
+exposes it on the command line in one call — no `Config.from_file(...)` or
+separate `add_arguments(parser)` step needed for a config built entirely in
+Python:
+
+```python
+cfg = Config(description="Train a policy")
+cfg.add_argument("dataset.name", default="oxe")
+cfg.add_argument("dataset.batch_size", default=32)
+cfg.add_argument("training.learning_rate", default=1e-4, type=float)
+cfg.add_argument("training.optimizer", default="adam", choices=["adam", "sgd"])
+
+cfg.parse_args()   # parses sys.argv against cfg.parser and applies overrides
+```
+
+`type` accepts a Python type (`int`, `float`, `bool`, `list`, `dict`) or the
+schema's string name; `choices=[...]` is shorthand for `set_values(...)` that
+also becomes an argparse `choices` option; `help="..."` overrides the
+auto-generated `(type) default: ...` help text. A leading `--` on the name is
+optional (`add_argument("--training.learning_rate", ...)` works too).
+
+Because loading a file (`from_file`/`from_yaml`/`from_json`) and
+`set_bounds`/`set_values` also resync `cfg.parser`, `cfg.parse_args()` works
+immediately after any of them — `add_arguments(parser)` is only needed when
+composing config options into a *separate* parser:
 
 ```python
 parser = argparse.ArgumentParser()
@@ -163,7 +191,7 @@ Or, when the config owns the whole command line:
 
 ```python
 cfg = Config.from_file("config.yaml")
-cfg.parse_args()                       # builds a parser, parses sys.argv, applies
+cfg.parse_args()                       # parses sys.argv against cfg.parser, applies
 cfg.parse_args(strict=False)           # tolerate argv entries meant for others
 ```
 
@@ -214,17 +242,19 @@ sweep["parameters"]["training.num_epochs"]     # {"value": 100}  (fixed, not swe
 
 | Member | Description |
 |---|---|
-| `Config()` | Empty config; groups/fields must be `define()`d or loaded before use |
+| `Config(description=None)` | Empty config with its own `argparse.ArgumentParser`; groups/fields must be `define()`d/`add_argument()`d or loaded before use |
 | `define(group, field, default=None, type=None, **extra)` | Register a field, creating its group if needed |
+| `add_argument(name, default=None, type=None, help=None, choices=None, **extra)` | argparse-style shorthand: `define()` a dotted `"group.field"` and expose it on `cfg.parser` in one call |
+| `parser` | The config's internal `argparse.ArgumentParser`, resynced whenever fields/bounds/values change |
 | `groups()` / `fields(group)` | List known group / field names |
 | `schema(group, field)` | Return the field's `FieldSpec` (`type`, `default`, `bounds`, `values`) |
 | `set_bounds(group, field, min=None, max=None, **extra)` | Attach a continuous search range to an existing field |
 | `set_values(group, field, values)` | Attach a discrete/categorical value set to an existing field |
 | `Config.from_dict(data)` / `from_yaml(path)` / `from_json(path)` / `from_file(path)` | Load groups/fields from a dict or file |
 | `Config.from_cli(argv=None, default_config=None, description=None)` | Load `--config <file>` and apply `--<group>.<field>` overrides |
-| `add_arguments(parser, groups=None)` | Add typed `--<group>.<field>` options to an existing `argparse` parser |
+| `add_arguments(parser, groups=None)` | Add typed `--<group>.<field>` options to a *separate* `argparse` parser |
 | `apply_args(args)` | Apply dotted overrides from a parsed namespace or dict |
-| `parse_args(argv=None, parser=None, strict=True)` | One-shot: build/extend a parser, parse, and apply overrides |
+| `parse_args(argv=None, parser=None, strict=True)` | Parse against `cfg.parser` (or a given `parser`) and apply overrides |
 | `to_dict()` | Export the current config as a nested dict |
 | `save(path)` | Write to `.yaml`/`.yml`/`.json` |
 | `to_sweep(method="bayes", metric=None, groups=None)` / `to_sweep_file(path, ...)` | Build/write a W&B-compatible sweep config |
