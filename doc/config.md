@@ -107,6 +107,81 @@ cfg.training.set_bounds("learning_rate", min=1e-5, max=1e-2)
 cfg.training.set_values("optimizer", ["adam", "sgd"])
 ```
 
+## CLI overrides (argparse)
+
+Every known field is exposed as a dotted, typed `--<group>.<field>` command-line
+option — the standard training-script pattern, and the same keys the W&B sweep
+export uses, so a `wandb agent` command line
+(`python train.py --training.learning_rate=0.001`) parses directly.
+Precedence is **defaults < config file < CLI**: options the user didn't pass
+keep their config values.
+
+The one-liner for a train script is `Config.from_cli()`, which handles
+`--config <file>` plus overrides:
+
+```python
+# train.py
+cfg = Config.from_cli(default_config="config.yaml")
+```
+
+```bash
+python train.py --config other.yaml \
+    --training.learning_rate 1e-3 \
+    --dataset.batch_size 64 \
+    --dataset.shuffle false
+```
+
+Values are converted using each field's learned `type`:
+
+- `int` / `float` / `str` — converted directly; passing a non-numeric value to
+  an `int` field is an argparse error.
+- `bool` — accepts a bare flag (`--dataset.shuffle`) or an explicit value
+  (`--dataset.shuffle false`, `--dataset.shuffle=True`; `1/0/yes/no/on/off`
+  also work).
+- `list` — a JSON array (`'["a", "b"]'`) or comma-separated string
+  (`wrist,front` → `["wrist", "front"]`, `1,2,3` → `[1, 2, 3]`).
+- `dict` — a JSON object (`'{"warmup": 10}'`).
+
+A field with `values` set becomes an argparse `choices` option, so passing a
+value outside the set is rejected at parse time. Overriding a field never
+touches its schema `default` — only the current value changes.
+
+To compose with an existing parser (script-level flags alongside config
+overrides), use the lower-level pieces:
+
+```python
+parser = argparse.ArgumentParser()
+parser.add_argument("--run-name", default="run0")
+
+cfg = Config.from_file("config.yaml")
+cfg.add_arguments(parser)              # adds --dataset.*, --training.*, ...
+args = parser.parse_args()
+cfg.apply_args(args)                   # applies dotted keys; ignores run_name
+```
+
+Or, when the config owns the whole command line:
+
+```python
+cfg = Config.from_file("config.yaml")
+cfg.parse_args()                       # builds a parser, parses sys.argv, applies
+cfg.parse_args(strict=False)           # tolerate argv entries meant for others
+```
+
+`apply_args` also accepts a plain dict of dotted keys (string values are
+coerced through the field's type), which is convenient for applying
+`wandb.config` inside a sweep run:
+
+```python
+cfg.apply_args(dict(wandb.config))     # {"training.learning_rate": 0.0007, ...}
+```
+
+The sweep-conversion entrypoint accepts the same overrides before exporting:
+
+```bash
+python -m robotdataset.configuration_system.main config.yaml sweep.yaml \
+    --method bayes --training.num_epochs 200
+```
+
 ## Exporting
 
 ```python
@@ -146,6 +221,10 @@ sweep["parameters"]["training.num_epochs"]     # {"value": 100}  (fixed, not swe
 | `set_bounds(group, field, min=None, max=None, **extra)` | Attach a continuous search range to an existing field |
 | `set_values(group, field, values)` | Attach a discrete/categorical value set to an existing field |
 | `Config.from_dict(data)` / `from_yaml(path)` / `from_json(path)` / `from_file(path)` | Load groups/fields from a dict or file |
+| `Config.from_cli(argv=None, default_config=None, description=None)` | Load `--config <file>` and apply `--<group>.<field>` overrides |
+| `add_arguments(parser, groups=None)` | Add typed `--<group>.<field>` options to an existing `argparse` parser |
+| `apply_args(args)` | Apply dotted overrides from a parsed namespace or dict |
+| `parse_args(argv=None, parser=None, strict=True)` | One-shot: build/extend a parser, parse, and apply overrides |
 | `to_dict()` | Export the current config as a nested dict |
 | `save(path)` | Write to `.yaml`/`.yml`/`.json` |
 | `to_sweep(method="bayes", metric=None, groups=None)` / `to_sweep_file(path, ...)` | Build/write a W&B-compatible sweep config |

@@ -21,14 +21,24 @@ eligible for W&B sweep export::
     cfg.set_bounds("training", "learning_rate", min=1e-5, max=1e-2)
     cfg.set_values("training", "optimizer", ["adam", "sgd"])
     cfg.to_sweep_file("sweep.yaml", method="bayes", metric={"name": "loss", "goal": "minimize"})
+
+Command-line overrides follow the standard training-script pattern: every
+known field is exposed as a dotted, typed `--<group>.<field>` argparse
+option (the same keys the W&B sweep export uses, so `wandb agent` command
+lines parse directly), with precedence defaults < config file < CLI::
+
+    cfg = Config.from_cli(default_config="config.yaml")
+    # python train.py --config other.yaml --training.learning_rate 1e-3
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional, Sequence, Union
 
+from .cli import add_config_arguments, apply_namespace
 from .field import FieldSpec, infer_type
 from .group import Group
 
@@ -192,6 +202,76 @@ class Config:
         if path.suffix == ".json":
             return cls.from_json(path)
         raise ValueError(f"Unsupported config file extension: {path.suffix}")
+
+    # -- argparse / CLI overrides ---------------------------------------------
+
+    def add_arguments(
+        self,
+        parser: argparse.ArgumentParser,
+        groups: Optional[list[str]] = None,
+    ) -> argparse.ArgumentParser:
+        """Add a typed `--<group>.<field>` option to `parser` for every known field."""
+        return add_config_arguments(self, parser, groups=groups)
+
+    def apply_args(self, args: Union[argparse.Namespace, dict]) -> "Config":
+        """Apply dotted `group.field` overrides from a parsed namespace (or dict)."""
+        return apply_namespace(self, args)
+
+    def parse_args(
+        self,
+        argv: Optional[Sequence[str]] = None,
+        parser: Optional[argparse.ArgumentParser] = None,
+        strict: bool = True,
+    ) -> "Config":
+        """Parse `--<group>.<field>` overrides from the command line onto this config.
+
+        With `strict=False`, unrecognized arguments are ignored instead of
+        raising, so the config can share `argv` with another parser.
+        """
+        if parser is None:
+            parser = argparse.ArgumentParser()
+        self.add_arguments(parser)
+        if strict:
+            args = parser.parse_args(argv)
+        else:
+            args, _ = parser.parse_known_args(argv)
+        return self.apply_args(args)
+
+    @classmethod
+    def from_cli(
+        cls,
+        argv: Optional[Sequence[str]] = None,
+        default_config: Optional[PathLike] = None,
+        description: Optional[str] = None,
+    ) -> "Config":
+        """Standard train-script entrypoint: `--config file` plus field overrides.
+
+        Loads the file named by `--config` (falling back to `default_config`),
+        then applies any `--<group>.<field>` overrides from the rest of the
+        command line, e.g.::
+
+            cfg = Config.from_cli()
+            # python train.py --config config.yaml --training.learning_rate 1e-3
+        """
+        bootstrap = argparse.ArgumentParser(add_help=False)
+        bootstrap.add_argument("--config", "-c", default=None)
+        known, _ = bootstrap.parse_known_args(argv)
+        config_path = known.config if known.config is not None else default_config
+
+        config_help = "Path to a YAML/JSON config file"
+        if default_config is not None:
+            config_help += f" (default: {default_config})"
+        parser = argparse.ArgumentParser(description=description)
+        parser.add_argument("--config", "-c", default=None, help=config_help)
+
+        if config_path is None:
+            parser.parse_args(argv)  # lets -h/--help print before erroring
+            parser.error("--config is required (no default config file was provided)")
+
+        cfg = cls.from_file(config_path)
+        cfg.add_arguments(parser)
+        args = parser.parse_args(argv)
+        return cfg.apply_args(args)
 
     # -- exporting ----------------------------------------------------------
 
