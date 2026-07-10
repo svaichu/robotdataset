@@ -37,6 +37,9 @@ dependencies = [
 config = [
     "pyyaml>=6.0",
 ]
+optuna = [
+    "optuna>=3.0",
+]
 oxe = [
     "tensorflow>=2.11.1",
     "tensorflow-datasets>=4.8.2",
@@ -48,6 +51,7 @@ hf = [
 ]
 dev = [
     "pytest>=7.0",
+    "optuna>=3.0",
 ]
 all = [
     "tensorflow>=2.11.1",

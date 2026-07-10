@@ -22,6 +22,11 @@ eligible for W&B sweep export::
     cfg.set_values("training", "optimizer", ["adam", "sgd"])
     cfg.to_sweep_file("sweep.yaml", method="bayes", metric={"name": "loss", "goal": "minimize"})
 
+The same `bounds`/`values` schema also drives two-way Optuna compatibility:
+`to_optuna_distributions()`/`suggest(trial)` build a search space and turn an
+`optuna.Trial` into a `Config`, and `from_optuna_params()`/`from_optuna_study()`
+load the winning config back (see `optuna_compat.py`).
+
 Command-line overrides follow the standard training-script pattern: every
 known field is exposed as a dotted, typed `--<group>.<field>` argparse
 option (the same keys the W&B sweep export uses, so `wandb agent` command
@@ -45,6 +50,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional, Sequence, Union
 
+from . import optuna_compat
 from .cli import add_config_arguments, apply_namespace, normalize_type
 from .field import FieldSpec, infer_type
 from .group import Group
@@ -353,6 +359,13 @@ class Config:
                     out[group][field] = value
         return out
 
+    def clone(self) -> "Config":
+        """Return an independent copy, preserving schema (types, bounds, values)."""
+        cfg = Config.from_dict(self.to_dict())
+        cfg._description = self._description
+        cfg._sync_parser()
+        return cfg
+
     def save(self, path: PathLike) -> None:
         path = Path(path)
         if path.suffix in (".yaml", ".yml"):
@@ -409,6 +422,29 @@ class Config:
         sweep_config = self.to_sweep(method=method, metric=metric, groups=groups)
         with open(path, "w") as f:
             yaml.safe_dump(sweep_config, f, sort_keys=False)
+
+    # -- Optuna compatibility (two-way) ----------------------------------
+
+    def to_optuna_distributions(self, groups: Optional[list[str]] = None) -> dict:
+        """Build a dict of `optuna.distributions`, keyed `'group.field'`, from sweepable fields."""
+        return optuna_compat.to_optuna_distributions(self, groups=groups)
+
+    def suggest(self, trial: Any, groups: Optional[list[str]] = None) -> "Config":
+        """Return a new `Config` with sweepable fields set from an `optuna.Trial`'s suggestions.
+
+            def objective(trial):
+                trial_cfg = cfg.suggest(trial)
+                return train(trial_cfg)
+        """
+        return optuna_compat.suggest(self, trial, groups=groups)
+
+    def from_optuna_params(self, params: dict) -> "Config":
+        """Return a new `Config` with dotted `'group.field'` params (e.g. `trial.params`) applied."""
+        return optuna_compat.from_optuna_params(self, params)
+
+    def from_optuna_study(self, study: Any) -> "Config":
+        """Return a new `Config` with the winning params from a completed `optuna.Study` applied."""
+        return optuna_compat.from_optuna_study(self, study)
 
     # -- misc -----------------------------------------------------------
 
