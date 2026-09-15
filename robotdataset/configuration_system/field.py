@@ -42,6 +42,7 @@ class FieldSpec:
     default: Any
     bounds: Optional[dict] = None
     values: Optional[list] = None
+    help: Optional[str] = None
 
     def is_sweepable(self) -> bool:
         return self.bounds is not None or self.values is not None
@@ -62,6 +63,7 @@ class FieldSpec:
             default=default,
             bounds=bounds,
             values=values,
+            help=spec.get("help"),
         )
 
     def to_dict(self) -> dict:

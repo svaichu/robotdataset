@@ -21,14 +21,31 @@ eligible for W&B sweep export::
     cfg.set_bounds("training", "learning_rate", min=1e-5, max=1e-2)
     cfg.set_values("training", "optimizer", ["adam", "sgd"])
     cfg.to_sweep_file("sweep.yaml", method="bayes", metric={"name": "loss", "goal": "minimize"})
+
+Command-line overrides follow the standard training-script pattern: every
+known field is exposed as a dotted, typed `--<group>.<field>` argparse
+option (the same keys the W&B sweep export uses, so `wandb agent` command
+lines parse directly), with precedence defaults < config file < CLI. A
+`Config` owns an internal `argparse.ArgumentParser` that stays in sync with
+its schema, so `add_argument()` doubles as `define()` + CLI exposure::
+
+    cfg = Config(description="Train a policy")
+    cfg.add_argument("dataset.name", default="oxe")
+    cfg.add_argument("training.learning_rate", default=1e-4, type=float)
+    cfg.parse_args()   # parses sys.argv, applies overrides in place
+
+    cfg = Config.from_cli(default_config="config.yaml")
+    # python train.py --config other.yaml --training.learning_rate 1e-3
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional, Sequence, Union
 
+from .cli import add_config_arguments, apply_namespace, normalize_type
 from .field import FieldSpec, infer_type
 from .group import Group
 
@@ -50,9 +67,11 @@ def _require_yaml():
 class Config:
     """A dynamically-learned, fluent config object."""
 
-    def __init__(self) -> None:
+    def __init__(self, description: Optional[str] = None) -> None:
         object.__setattr__(self, "_groups", {})  # group -> {field: value}
         object.__setattr__(self, "_schema", {})  # group -> {field: FieldSpec}
+        object.__setattr__(self, "_description", description)
+        object.__setattr__(self, "_parser", argparse.ArgumentParser(description=description))
 
     # -- fluent group access -------------------------------------------------
 
@@ -90,6 +109,49 @@ class Config:
         self._update_group(group, {field: spec_dict})
         return self
 
+    def add_argument(
+        self,
+        name: str,
+        default: Any = None,
+        type: Any = None,
+        help: Optional[str] = None,
+        choices: Optional[list] = None,
+        **extra: Any,
+    ) -> "Config":
+        """argparse-style shorthand: register a field and expose it as a CLI option in one call.
+
+        `name` is a dotted `"group.field"` (a leading `--` is stripped, so
+        `cfg.add_argument("--training.learning_rate", default=1e-4, type=float)`
+        also works). `type` accepts a Python type (`int`, `float`, `bool`,
+        `list`, `dict`) or the schema's string name. Equivalent to `define()`
+        immediately followed by exposing the field on `cfg.parser`::
+
+            cfg = Config(description="Train a policy")
+            cfg.add_argument("dataset.name", default="oxe")
+            cfg.add_argument("training.optimizer", default="adam", choices=["adam", "sgd"])
+            cfg.parse_args()  # parses sys.argv using cfg.parser
+        """
+        name = name.lstrip("-")
+        if "." not in name:
+            raise ValueError(f"add_argument name must be 'group.field', got {name!r}")
+        group, _, field = name.partition(".")
+        if choices is not None:
+            extra.setdefault("values", list(choices))
+        if help is not None:
+            extra.setdefault("help", help)
+        self.define(group, field, default=default, type=normalize_type(type), **extra)
+        return self
+
+    @property
+    def parser(self) -> argparse.ArgumentParser:
+        """The internal `argparse.ArgumentParser`, kept in sync with the schema."""
+        return self._parser
+
+    def _sync_parser(self) -> None:
+        parser = argparse.ArgumentParser(description=self._description)
+        add_config_arguments(self, parser)
+        self._parser = parser
+
     # -- internal learning (used when loading files / defining fields) --------
 
     def _update_group(self, group: str, fields: dict) -> None:
@@ -97,6 +159,7 @@ class Config:
         self._schema.setdefault(group, {})
         for name, value in fields.items():
             self._set_field(group, name, value)
+        self._sync_parser()
 
     def _set_field(self, group: str, field: str, value: Any) -> None:
         if isinstance(value, dict) and "type" in value:
@@ -152,12 +215,14 @@ class Config:
             bounds["max"] = max
         bounds.update(extra)
         spec.bounds = bounds
+        self._sync_parser()
         return self
 
     def set_values(self, group: str, field: str, values: list) -> "Config":
         """Attach a discrete/categorical set of candidate values to a field."""
         spec = self._require_field(group, field)
         spec.values = list(values)
+        self._sync_parser()
         return self
 
     # -- loading ----------------------------------------------------------
@@ -192,6 +257,85 @@ class Config:
         if path.suffix == ".json":
             return cls.from_json(path)
         raise ValueError(f"Unsupported config file extension: {path.suffix}")
+
+    # -- argparse / CLI overrides ---------------------------------------------
+
+    def add_arguments(
+        self,
+        parser: argparse.ArgumentParser,
+        groups: Optional[list[str]] = None,
+    ) -> argparse.ArgumentParser:
+        """Add a typed `--<group>.<field>` option to `parser` for every known field."""
+        return add_config_arguments(self, parser, groups=groups)
+
+    def apply_args(self, args: Union[argparse.Namespace, dict]) -> "Config":
+        """Apply dotted `group.field` overrides from a parsed namespace (or dict)."""
+        return apply_namespace(self, args)
+
+    def parse_args(
+        self,
+        argv: Optional[Sequence[str]] = None,
+        parser: Optional[argparse.ArgumentParser] = None,
+        strict: bool = True,
+    ) -> "Config":
+        """Parse `--<group>.<field>` overrides from the command line onto this config.
+
+        Uses the config's own internal parser (`self.parser`, kept in sync
+        with the schema) by default — no need to call `add_arguments()`
+        first. Pass an external `parser` to merge config options into a
+        parser that also defines script-level flags. With `strict=False`,
+        unrecognized arguments are ignored instead of raising, so the config
+        can share `argv` with another parser.
+        """
+        if parser is None:
+            parser = self._parser
+        else:
+            self.add_arguments(parser)
+        if strict:
+            args = parser.parse_args(argv)
+        else:
+            args, _ = parser.parse_known_args(argv)
+        return self.apply_args(args)
+
+    @classmethod
+    def from_cli(
+        cls,
+        argv: Optional[Sequence[str]] = None,
+        default_config: Optional[PathLike] = None,
+        description: Optional[str] = None,
+    ) -> "Config":
+        """Standard train-script entrypoint: `--config file` plus field overrides.
+
+        Loads the file named by `--config` (falling back to `default_config`),
+        then applies any `--<group>.<field>` overrides from the rest of the
+        command line, e.g.::
+
+            cfg = Config.from_cli()
+            # python train.py --config config.yaml --training.learning_rate 1e-3
+        """
+        bootstrap = argparse.ArgumentParser(add_help=False)
+        bootstrap.add_argument("--config", "-c", default=None)
+        known, _ = bootstrap.parse_known_args(argv)
+        config_path = known.config if known.config is not None else default_config
+
+        if config_path is None:
+            parser = argparse.ArgumentParser(description=description)
+            parser.add_argument("--config", "-c", default=None, help="Path to a YAML/JSON config file")
+            parser.parse_args(argv)  # lets -h/--help print before erroring
+            parser.error("--config is required (no default config file was provided)")
+
+        cfg = cls.from_file(config_path)
+        if description is not None:
+            cfg._description = description
+            cfg._sync_parser()
+
+        config_help = "Path to a YAML/JSON config file"
+        if default_config is not None:
+            config_help += f" (default: {default_config})"
+        cfg.parser.add_argument("--config", "-c", default=None, help=config_help)
+
+        args = cfg.parser.parse_args(argv)
+        return cfg.apply_args(args)
 
     # -- exporting ----------------------------------------------------------
 
