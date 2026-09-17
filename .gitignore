@@ -196,3 +196,5 @@ cython_debug/
 .vscode/settings.json
 *.mp4
 example/*.gif
+lerobot_smoke_batch.gif
+lerobot_video_smoke.md
