@@ -5,8 +5,6 @@ with support for the OXE (Open X-Embodiment) dataset collection from Google Clou
 and HuggingFace datasets.
 """
 
-from robotdataset.configuration_system import Config, FieldSpec
-
 try:
     from robotdataset.oxe_dataset import (
         OXEDataset,
@@ -44,8 +42,6 @@ except Exception:  # pragma: no cover - heavy deps (torch/torchrl) not installed
     itemViz = None  # type: ignore[assignment]
 
 __all__ = [
-    'Config',
-    'FieldSpec',
     'OXEDataset',
     'OXEJAXDataset',
     'Table30v2Dataset',

@@ -19,7 +19,6 @@ use in deep-learning training pipelines.
 | [LeRobot video](doc/datasets/lerobot_video.md) | `LeRobotVideoDataset` (any LeRobot v2.1 repo with external mp4 video, HuggingFace) |
 | [Samplers](doc/samplers.md) | `TemporalSampler`, `EpisodeTubeletSampler`, `JAXTemporalSampler` |
 | [Visualization](doc/visualization.md) | `batchViz`, `itemViz`, `episodeViz` |
-| [Config](doc/config.md) | `Config` — fluent config builder, YAML/JSON loading, W&B sweep export |
 
 ## Quick start
 
@@ -86,8 +85,6 @@ from robotdataset import (
     list_datasets, validate_dataset_name, dataset2path, list_agibot_tasks,
     # Visualization
     batchViz, itemViz, episodeViz,
-    # Config
-    Config, FieldSpec,
 )
 ```
 
