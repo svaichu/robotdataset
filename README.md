@@ -16,9 +16,9 @@ use in deep-learning training pipelines.
 | [OXE JAX datasets](doc/datasets/oxe_jax.md) | `OXEJAXDataset` — NumPy/JAX batch path |
 | [Table30v2](doc/datasets/table30v2.md) | `Table30v2Dataset` (RoboChallenge/Table30v2, HuggingFace) |
 | [AgiBotWorld-Beta](doc/datasets/agibot.md) | `AgiBotWorldBetaDataset`, `list_agibot_tasks` |
+| [LeRobot video](doc/datasets/lerobot_video.md) | `LeRobotVideoDataset` (any LeRobot v2.1 repo with external mp4 video, HuggingFace) |
 | [Samplers](doc/samplers.md) | `TemporalSampler`, `EpisodeTubeletSampler`, `JAXTemporalSampler` |
 | [Visualization](doc/visualization.md) | `batchViz`, `itemViz`, `episodeViz` |
-| [Config](doc/config.md) | `Config` — fluent config builder, YAML/JSON loading, W&B sweep export |
 
 ## Quick start
 
@@ -68,6 +68,7 @@ All loaders are in **alpha** — APIs may change without notice between releases
 | Open X-Embodiment (JAX path) | `OXEJAXDataset` | `gs://gresearch/robotics` | **Alpha (JAX path)** |
 | Table30 v2 | `Table30v2Dataset` | `RoboChallenge/Table30v2` (HF) | **Alpha** |
 | AgiBotWorld-Beta | `AgiBotWorldBetaDataset` | `agibot-world/AgiBotWorld-Beta` (HF) | **Alpha** |
+| LeRobot (external video) | `LeRobotVideoDataset` | any LeRobot v2.1 repo (HF) | **Alpha** |
 | LIBERO | — | `openvla/modified_libero_rlds` (HF) | Planned |
 
 ## Public API
@@ -77,15 +78,13 @@ Everything below is importable directly from the top-level package:
 ```python
 from robotdataset import (
     # Dataset classes
-    OXEDataset, OXEJAXDataset, Table30v2Dataset, AgiBotWorldBetaDataset,
+    OXEDataset, OXEJAXDataset, Table30v2Dataset, AgiBotWorldBetaDataset, LeRobotVideoDataset,
     # Samplers
     TemporalSampler, EpisodeTubeletSampler, JAXTemporalSampler,
     # Discovery helpers
     list_datasets, validate_dataset_name, dataset2path, list_agibot_tasks,
     # Visualization
     batchViz, itemViz, episodeViz,
-    # Config
-    Config, FieldSpec,
 )
 ```
 

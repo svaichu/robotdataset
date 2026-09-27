@@ -5,8 +5,6 @@ with support for the OXE (Open X-Embodiment) dataset collection from Google Clou
 and HuggingFace datasets.
 """
 
-from robotdataset.configuration_system import Config, FieldSpec
-
 try:
     from robotdataset.oxe_dataset import (
         OXEDataset,
@@ -31,23 +29,24 @@ except Exception:  # pragma: no cover - optional dependency
 try:
     from robotdataset.table30v2_dataset import Table30v2Dataset
     from robotdataset.agibot_dataset import AgiBotWorldBetaDataset
+    from robotdataset.lerobot_video_dataset import LeRobotVideoDataset
     from robotdataset.agibot.loader import list_agibot_tasks
     from robotdataset.utils import batchViz, episodeViz, itemViz
 except Exception:  # pragma: no cover - heavy deps (torch/torchrl) not installed
     Table30v2Dataset = None  # type: ignore[assignment]
     AgiBotWorldBetaDataset = None  # type: ignore[assignment]
+    LeRobotVideoDataset = None  # type: ignore[assignment]
     list_agibot_tasks = None  # type: ignore[assignment]
     batchViz = None  # type: ignore[assignment]
     episodeViz = None  # type: ignore[assignment]
     itemViz = None  # type: ignore[assignment]
 
 __all__ = [
-    'Config',
-    'FieldSpec',
     'OXEDataset',
     'OXEJAXDataset',
     'Table30v2Dataset',
     'AgiBotWorldBetaDataset',
+    'LeRobotVideoDataset',
     'dataset2path',
     'list_datasets',
     'list_agibot_tasks',
@@ -60,5 +59,5 @@ __all__ = [
     'episodeViz',
 ]
 
-__version__ = '0.1.0'
+__version__ = '0.2.4'
 __author__ = 'Robotics Action Group'
