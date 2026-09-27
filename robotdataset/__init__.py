@@ -63,5 +63,5 @@ __all__ = [
     'episodeViz',
 ]
 
-__version__ = '0.1.0'
+__version__ = '0.2.4'
 __author__ = 'Robotics Action Group'
