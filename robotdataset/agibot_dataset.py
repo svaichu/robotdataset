@@ -7,6 +7,8 @@ from tensordict import TensorDict
 from torchrl.data import ImmutableDatasetWriter, TensorStorage
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 
+from robotdataset.dataset_stats import DatasetStatsMixin
+
 from robotdataset._common import _get_cache_dir
 from robotdataset.agibot.loader import (
     DEFAULT_CAMERAS,
@@ -27,7 +29,7 @@ from robotdataset.oxe.memmap_builder import (
 from robotdataset.oxe.temporal_sampler import TemporalSampler
 
 
-class AgiBotWorldBetaDataset(BaseDatasetExperienceReplay):
+class AgiBotWorldBetaDataset(DatasetStatsMixin, BaseDatasetExperienceReplay):
     """AgiBotWorld-Beta offline dataset from HuggingFace as a TorchRL ``BaseDatasetExperienceReplay``.
 
     Loads ``agibot-world/AgiBotWorld-Beta``.  The dataset is structured as
@@ -181,6 +183,9 @@ class AgiBotWorldBetaDataset(BaseDatasetExperienceReplay):
                 repo_files=repo_files,
                 cache_dir=self.root,
             )
+
+        # Per-episode statistics; never triggers a rebuild of an episode.
+        self._ensure_episode_stats()
 
         # ------------------------------------------------------------------
         # 5. Build (or reuse) the combined memmap and load it lazily.

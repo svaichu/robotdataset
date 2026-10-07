@@ -37,6 +37,9 @@ jobs:
           - name: lerobot-video
             extras: hf
             test-path: test/test_lerobot_video_dataset.py
+          - name: stats
+            extras: hf
+            test-path: test/test_stats.py test/test_dataset_stats.py
 
     steps:
       - uses: actions/checkout@v4
