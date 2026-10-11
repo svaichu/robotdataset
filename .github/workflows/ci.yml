@@ -40,6 +40,9 @@ jobs:
           - name: stats
             extras: hf
             test-path: test/test_stats.py test/test_dataset_stats.py
+          - name: stats-all-datasets
+            extras: oxe,hf
+            test-path: test/test_dataset_stats_all.py
 
     steps:
       - uses: actions/checkout@v4
