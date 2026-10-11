@@ -7,6 +7,8 @@ from tensordict import TensorDict
 from torchrl.data import ImmutableDatasetWriter, TensorStorage
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 
+from robotdataset.dataset_stats import DatasetStatsMixin
+
 from robotdataset._common import _get_cache_dir
 from robotdataset.hf.loader import infer_modalities_from_storage
 from robotdataset.lerobot.loader import LeRobotSource
@@ -20,7 +22,7 @@ from robotdataset.oxe.memmap_builder import (
 from robotdataset.oxe.temporal_sampler import TemporalSampler
 
 
-class LeRobotVideoDataset(BaseDatasetExperienceReplay):
+class LeRobotVideoDataset(DatasetStatsMixin, BaseDatasetExperienceReplay):
     """LeRobot v2.1 dataset with external mp4 video as a TorchRL replay buffer.
 
     Works with any LeRobot dataset whose camera streams are separate mp4 files
@@ -152,6 +154,9 @@ class LeRobotVideoDataset(BaseDatasetExperienceReplay):
             build_missing_episodes(
                 self.source, episodes_dir, missing, self.video_keys_loaded
             )
+
+        # Per-episode statistics; never triggers a rebuild of an episode.
+        self._ensure_episode_stats()
 
         # ------------------------------------------------------------------
         # 4. Build (or reuse) combined memmap, then load it lazily

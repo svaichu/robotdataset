@@ -7,6 +7,8 @@ from tensordict import TensorDict
 from torchrl.data import ImmutableDatasetWriter, TensorStorage
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 
+from robotdataset.dataset_stats import DatasetStatsMixin
+
 from robotdataset._common import _get_cache_dir
 from robotdataset.hf.loader import (
     filter_by_tasks,
@@ -24,7 +26,7 @@ from robotdataset.oxe.memmap_builder import (
 from robotdataset.oxe.temporal_sampler import TemporalSampler
 
 
-class Table30v2Dataset(BaseDatasetExperienceReplay):
+class Table30v2Dataset(DatasetStatsMixin, BaseDatasetExperienceReplay):
     """Table30v2 offline dataset from HuggingFace as a TorchRL ``BaseDatasetExperienceReplay``.
 
     Loads ``RoboChallenge/Table30v2`` from HuggingFace Hub.  On first use,
@@ -114,6 +116,9 @@ class Table30v2Dataset(BaseDatasetExperienceReplay):
         missing = [i for i in selected if not is_episode_cached(episodes_dir / str(i))]
         if missing:
             build_missing_episodes(hf_dataset, episodes_dir, missing)
+
+        # Per-episode statistics; never triggers a rebuild of an episode.
+        self._ensure_episode_stats()
 
         # ------------------------------------------------------------------
         # 4. Build (or reuse) combined memmap, then load it lazily
