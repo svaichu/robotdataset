@@ -16,6 +16,8 @@ from tensordict import TensorDict
 from torchrl.data import ImmutableDatasetWriter, TensorStorage
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 
+from robotdataset.dataset_stats import DatasetStatsMixin
+
 from robotdataset._common import _get_cache_dir
 from robotdataset.oxe.episode_tubelet_sampler import EpisodeTubeletSampler
 from robotdataset.oxe.temporal_sampler import TemporalSampler
@@ -307,7 +309,7 @@ def _copy_metadata_only(src: str, dst: str) -> None:
 # OXEDataset
 # ---------------------------------------------------------------------------
 
-class OXEDataset(BaseDatasetExperienceReplay):
+class OXEDataset(DatasetStatsMixin, BaseDatasetExperienceReplay):
     """OXE offline dataset as a TorchRL ``BaseDatasetExperienceReplay``.
 
     On first use the TFDS dataset is downloaded from the OXE GCS bucket and
@@ -454,6 +456,8 @@ class OXEDataset(BaseDatasetExperienceReplay):
         #    Peak RAM during build = one episode; during training = batch_size.
         # ------------------------------------------------------------------
         self._loaded_indices: List[int] = selected
+        # Per-episode statistics; never triggers a rebuild of an episode.
+        self._ensure_episode_stats()
         combined_dir = self._combined_dir(selected)
         if not is_combined_complete(combined_dir):
             build_combined_storage(selected, episodes_dir, combined_dir)
