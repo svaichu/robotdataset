@@ -39,7 +39,7 @@ jobs:
             test-path: test/test_lerobot_video_dataset.py
           - name: stats
             extras: hf
-            test-path: test/test_stats.py test/test_dataset_stats.py
+            test-path: test/test_stats.py test/test_dataset_stats.py test/test_relative_stats.py
           - name: stats-all-datasets
             extras: oxe,hf
             test-path: test/test_dataset_stats_all.py
