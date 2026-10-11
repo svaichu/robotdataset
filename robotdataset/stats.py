@@ -181,31 +181,32 @@ class EpisodeStats:
     moments: Dict[str, Dict[str, Any]]
     sample: Dict[str, np.ndarray] = field(default_factory=dict)
 
-    def save(self, episode_dir: Path | str) -> None:
-        """Atomically write ``stats.json`` and ``stats_sample.npz`` into ``episode_dir``.
+    def save(self, episode_dir: Path | str, stem: str = "stats") -> None:
+        """Atomically write ``<stem>.json`` and ``<stem>_sample.npz`` into ``episode_dir``.
 
-        The sample file is written first; ``stats.json`` is the validity marker.
+        The sample file is written first; the json file is the validity marker.
+        ``stem`` is ``"stats"`` for the absolute-signal record.
         """
         d = Path(episode_dir)
         arrays = {quote(p, safe=""): a for p, a in self.sample.items()}
-        _atomic_write(d / SAMPLE_FILE, lambda f: np.savez(f, **arrays))
+        _atomic_write(d / f"{stem}_sample.npz", lambda f: np.savez(f, **arrays))
         payload = {
             "version": self.version,
             "num_rows": self.num_rows,
             "schema": self.schema,
             "moments": self.moments,
         }
-        _atomic_write(d / STATS_FILE, lambda f: f.write(json.dumps(payload).encode()))
+        _atomic_write(d / f"{stem}.json", lambda f: f.write(json.dumps(payload).encode()))
 
     @classmethod
-    def load(cls, episode_dir: Path | str) -> Optional["EpisodeStats"]:
+    def load(cls, episode_dir: Path | str, stem: str = "stats") -> Optional["EpisodeStats"]:
         """Load a record; ``None`` if missing, corrupted or of an unknown version."""
         d = Path(episode_dir)
         try:
-            meta = json.loads((d / STATS_FILE).read_text())
+            meta = json.loads((d / f"{stem}.json").read_text())
             if meta["version"] != STATS_VERSION:
                 return None
-            with np.load(d / SAMPLE_FILE) as npz:
+            with np.load(d / f"{stem}_sample.npz") as npz:
                 sample = {unquote(k): npz[k] for k in npz.files}
             rec = cls(
                 version=int(meta["version"]),

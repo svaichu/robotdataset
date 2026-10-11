@@ -88,8 +88,8 @@ State groups default to every leaf under `observation/state/` (`all` is dropped 
 slices exist). `count` is dropped. Use `override=True`: with `override=False` the
 processor silently keeps any statistics already stored for that embodiment tag.
 `check_against(g, modality_configs)` compares group names to a GR00T modality config.
-Relative-action statistics are not computed yet; see
-[relative_action_stats.md](relative_action_stats.md).
+Relative-action statistics come from `ds.generate_relative_action_stats(...)`, passed as
+`relative_action=`; see [relative_action_stats.md](relative_action_stats.md).
 
 ## Sample-size benchmark (synthetic)
 
