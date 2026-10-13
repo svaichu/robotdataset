@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-from robotdataset.info import DatasetInfo, build_loader
+from robotdataset.info import DatasetInfo, build_loader, pretty_block
 
 
 class ModelAdapter:
@@ -29,6 +29,13 @@ class ModelAdapter:
 
     name: str = ""
     YAML_HELP: str = ""
+    YAML_NOTES: Dict[str, str] = {}  # dotted key -> comment written after it in the generated block
+    YAML_EXAMPLES: Dict[str, Sequence[str]] = {}  # dotted key of an empty mapping -> comment lines showing an entry
+
+    @classmethod
+    def yaml_lines(cls, block: Mapping[str, Any]) -> List[str]:
+        """The model's block as readable YAML lines (written under ``<name>:`` by ``DatasetInfo.to_yaml``)."""
+        return pretty_block(block, notes=cls.YAML_NOTES, examples=cls.YAML_EXAMPLES)
 
     def __init__(self, info: DatasetInfo) -> None:
         self.info = info

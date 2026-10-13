@@ -115,6 +115,133 @@ def _default_names(paths: Sequence[str]) -> Dict[str, str]:
             return {p: name(p) for p in paths}
 
 
+# --------------------------------------------------------------------------- YAML writing
+
+
+def _flow(obj: Any) -> str:
+    """``obj`` on one line of flow-style YAML (scalars are quoted where flow context needs it)."""
+    import yaml
+
+    return yaml.safe_dump(obj, default_flow_style=True, width=10**6, sort_keys=False).strip()
+
+
+def _cell(key: str, value: Any) -> str:
+    """``key: value`` as it appears inside a flow mapping."""
+    return _flow({key: value})[1:-1]
+
+
+def _line(key: str, value: Any) -> str:
+    """``key: value`` on one line: a list or mapping in flow style, a scalar as is."""
+    return f"{key}: {_flow(value)}" if isinstance(value, (list, tuple, Mapping)) else _cell(key, value)
+
+
+def _flow_rows(rows: Sequence[Mapping[str, Any]], first: Sequence[str] = ()) -> List[str]:
+    """Every mapping as one ``{key: value, ...}`` line; the keys all rows share line up in columns."""
+    if not rows:
+        return []
+    order = list(first) + [k for k in rows[0] if k not in first]
+    common = [k for k in order if all(k in r for r in rows)]
+    width = {k: max(len(_cell(k, r[k])) for r in rows) for k in common}
+    lines = []
+    for r in rows:
+        extras = [_cell(k, v) for k, v in r.items() if k not in width]
+        parts = []
+        for i, k in enumerate(common):
+            cell = _cell(k, r[k])
+            # the last shared column is not padded, so extras (role, split, ...) follow it directly
+            parts.append((cell + ",").ljust(width[k] + 1) if i < len(common) - 1 else cell + ("," if extras else ""))
+        lines.append("{" + " ".join(parts + ([", ".join(extras)] if extras else [])) + "}")
+    return lines
+
+
+def _modality_lines(entries: Sequence[Mapping[str, Any]]) -> List[str]:
+    """The ``modalities:`` list: ``use`` first and columns aligned, a blank line between kinds."""
+    rows = _flow_rows(entries, first=("use", "path", "kind", "dtype", "shape", "name"))
+    out: List[str] = []
+    for i, (row, e) in enumerate(zip(rows, entries)):
+        if i and e["kind"] != entries[i - 1]["kind"]:
+            out.append("")
+        out.append(f"  - {row}")
+    return out
+
+
+def _align_notes(rows: Sequence[Tuple[str, Optional[str]]]) -> List[str]:
+    """Write each ``(code, note)`` as ``code  # note``; consecutive annotated lines of one indentation share a note column."""
+    out: List[str] = []
+    i = 0
+    while i < len(rows):
+        if rows[i][1] is None:
+            out.append(rows[i][0])
+            i += 1
+            continue
+        indent = len(rows[i][0]) - len(rows[i][0].lstrip())
+        j = i
+        while j < len(rows) and rows[j][1] is not None and len(rows[j][0]) - len(rows[j][0].lstrip()) == indent:
+            j += 1
+        width = max(len(code) for code, _ in rows[i:j])
+        out.extend(f"{code.ljust(width)}  # {note}" for code, note in rows[i:j])
+        i = j
+    return out
+
+
+def _block_rows(
+    block: Mapping[str, Any],
+    indent: int,
+    notes: Mapping[str, str],
+    examples: Mapping[str, Sequence[str]],
+    prefix: str,
+) -> List[Tuple[str, Optional[str]]]:
+    pad = " " * indent
+    rows: List[Tuple[str, Optional[str]]] = []
+    for key, value in block.items():
+        path = f"{prefix}{key}"
+        note = notes.get(path)
+        if isinstance(value, Mapping) and not value:
+            rows.append((f"{pad}{key}: {{}}", note))
+            rows.extend((f"{pad}# {ln}", None) for ln in examples.get(path, ()))
+        elif isinstance(value, Mapping) and all(isinstance(v, Mapping) for v in value.values()):
+            rows.append((f"{pad}{key}:", note))  # a table of groups: one aligned flow row per entry
+            names = [f"{k}:" for k in value]
+            width = max(len(n) for n in names)
+            rows.extend((f"{pad}  {n.ljust(width)} {row}", None) for n, row in zip(names, _flow_rows(list(value.values()))))
+        elif isinstance(value, Mapping):
+            rows.append((f"{pad}{key}:", note))
+            rows.extend(_block_rows(value, indent + 2, notes, examples, f"{path}."))
+        else:
+            rows.append((f"{pad}{_line(key, value)}", note))
+    return rows
+
+
+def pretty_block(
+    block: Mapping[str, Any],
+    indent: int = 2,
+    notes: Optional[Mapping[str, str]] = None,
+    examples: Optional[Mapping[str, Sequence[str]]] = None,
+) -> List[str]:
+    """A model block as readable YAML lines.
+
+    Nested mappings are blocks, lists and leaf values stay on one line (``video_delta: [0]``), and a mapping whose values
+    are all mappings (a table of groups) becomes one aligned ``{...}`` row per entry.  ``notes`` maps a dotted key
+    (``language.default``) to a comment written after it; ``examples`` maps the dotted key of an empty mapping to
+    comment lines that show what an entry looks like.
+    """
+    return _align_notes(_block_rows(block, indent, notes or {}, examples or {}, ""))
+
+
+def adapter_class(name: str) -> Optional[type]:
+    """The model adapter class registered under ``name`` in :data:`ADAPTERS` (``None`` if unknown or unimportable)."""
+    import importlib
+
+    spec = ADAPTERS.get(name)
+    if spec is None:
+        return None
+    module, _, cls_name = spec.partition(":")
+    try:
+        return getattr(importlib.import_module(module), cls_name)
+    except ImportError:
+        return None
+
+
 # --------------------------------------------------------------------------- entries
 
 
@@ -234,6 +361,7 @@ class DatasetInfo:
         for path in sorted(present - listed):  # string leaves the loader yields but get_modalities() does not describe
             if not _is_bookkeeping(path) and _holds_strings(batch[path]):
                 entries.append(ModalityInfo(path=path, kind="text", dtype="string", shape=()))
+        entries.sort(key=lambda e: KINDS.index(e.kind))  # images, states, actions, text; loader order within a kind
         names = _default_names([e.path for e in entries])
         fps = getattr(ds, "fps", None)
         info = cls(
@@ -346,36 +474,41 @@ class DatasetInfo:
     def to_yaml(self, path: Optional[str] = None, comments: Optional[Mapping[str, str]] = None) -> str:
         """The editable file (returned, and written to ``path`` if given).
 
-        ``comments`` maps an adapter block name to help text written above that block.
+        Modalities are one aligned line each (``use`` first, a blank line between kinds). A block of a registered model
+        adapter (``gr00t:``) is written by that adapter, with its help text and notes; any other block gets a generic
+        readable layout.  ``comments`` maps a block name to help text that replaces the adapter's.
         """
-        import yaml
-
-        def flow(obj: Any) -> str:
-            return yaml.safe_dump(obj, default_flow_style=True, width=10_000, sort_keys=False).strip()
-
         d = self.to_dict()
         lines = [
-            "# robotdataset dataset info -- generated; edit the modalities, then load the file in a model adapter.",
-            "#   use:   true on every modality the model should get (all start as false)",
-            "#   order: the order of this list is the order handed to the model",
-            "#   name:  the model-side group name (defaults to the shortest unique path suffix)",
-            "#   role:  optional override of the role implied by kind (video | state | action | language)",
-            "#   split: optional, cuts one vector leaf into named groups: [{name: eef, columns: [0, 6]}, ...]",
-            "# kind/dtype/shape describe the data; they are checked against the loader when the file is loaded.",
+            "# robotdataset dataset info (generated). Edit it, then load it with a model adapter.",
+            "#",
+            "#   use    true on every modality the model should get (all start as false)",
+            "#   order  the order of this list is the order handed to the model",
+            "#   name   the model-side group name (defaults to the shortest unique path suffix)",
+            "#   role   optional override of the role implied by kind: video | state | action | language",
+            "#   split  optional, cuts one vector leaf into named groups: [{name: eef, columns: [0, 6]}, ...]",
+            "#",
+            "# kind, dtype and shape describe the data; they are checked against the loader when the file is loaded.",
             "dataset:",
             f"  loader: {self.loader}",
-            f"  kwargs: {flow(dict(self.kwargs))}",
+            f"  kwargs: {_flow(dict(self.kwargs))}",
         ]
         for k in ("episodes_loaded", "steps_loaded", "fps"):
             if k in d["dataset"]:
                 lines.append(f"  {k}: {d['dataset'][k]}")
+        lines.append("")
         lines.append("modalities:")
-        lines.extend(f"  - {flow(e)}" for e in d["modalities"])
+        lines.extend(_modality_lines(d["modalities"]))
         for key, block in self.extra.items():
-            lines.extend(f"# {ln}" if ln else "#" for ln in (comments or {}).get(key, "").splitlines())
+            adapter = adapter_class(key)
+            if comments is not None and key in comments:
+                help_text = comments[key]
+            else:
+                help_text = adapter.YAML_HELP if adapter is not None else ""
+            lines.append("")
+            lines.extend(f"# {ln}" if ln else "#" for ln in help_text.splitlines())
             lines.append(f"{key}:")
-            body = yaml.safe_dump(block, default_flow_style=False, sort_keys=False).rstrip()
-            lines.extend("  " + ln for ln in body.splitlines())
+            lines.extend(adapter.yaml_lines(block) if adapter is not None else pretty_block(block))
         text = "\n".join(lines) + "\n"
         if path is not None:
             with open(path, "w") as f:
@@ -553,16 +686,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         args.loader, json.loads(args.kwargs), episodes=parse_episodes(args.episodes), stats=args.stats, exact=args.exact
     )
     print(info.table())
-    comments = None
     if args.adapter:
-        import importlib
-
-        module, _, cls_name = ADAPTERS[args.adapter].partition(":")
-        adapter_cls = getattr(importlib.import_module(module), cls_name)
-        info = adapter_cls.with_defaults(info)
-        comments = {adapter_cls.name: adapter_cls.YAML_HELP}
+        info = adapter_class(args.adapter).with_defaults(info)
     if args.output:
-        info.to_yaml(args.output, comments=comments)
+        info.to_yaml(args.output)
         print(f"\nwrote {args.output}: set 'use: true' on the modalities to feed the model")
     return 0
 

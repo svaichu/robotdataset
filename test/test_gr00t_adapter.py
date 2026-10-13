@@ -335,3 +335,25 @@ def test_gr00t_export_functions_keep_their_old_import_path():
 
     assert GR00T_STAT_KEYS == ("mean", "std", "min", "max", "q01", "q99")
     assert callable(check_against) and callable(to_gr00t_statistics)
+
+
+def test_generated_gr00t_block_carries_its_own_notes_and_reads_back(setup):
+    _, kwargs = setup
+    info = Gr00tAdapter.with_defaults(DatasetInfo.from_loader("Table30v2Dataset", kwargs, episodes=[0, 1]))
+    text = info.to_yaml()  # no help text is passed: the registered adapter supplies it
+    assert "# Isaac-GR00T settings (read by Gr00tAdapter).\ngr00t:\n  action_horizon: 16  # action delta_indices" in text
+    assert "  video_delta: [0]    # " in text and "  state_delta: [0]    # " in text
+    assert "\n  - 0" not in text  # lists stay on one line
+    assert "  action: {}  # per action group" in text and "  #   eef:     {rep: RELATIVE" in text
+    assert yaml.safe_load(text)["gr00t"] == Gr00tAdapter.DEFAULTS
+    assert "# Isaac-GR00T settings" not in info.to_yaml(comments={"gr00t": ""})
+    # once entries replace the {}, one aligned row per action group
+    entries = {
+        "pose": {"rep": "RELATIVE", "type": "EEF", "format": "XYZ_ROTVEC", "state_key": "pose"},
+        "gripper": {"rep": "ABSOLUTE", "type": "NON_EEF"},
+    }
+    filled = DatasetInfo.from_dict({**info.to_dict(), "gr00t": {**info.extra["gr00t"], "action": entries}})
+    text = filled.to_yaml()
+    rows = [ln for ln in text.splitlines() if ln.startswith(("    pose:", "    gripper:"))]
+    assert len(rows) == 2 and rows[0].index("{rep") == rows[1].index("{rep")
+    assert yaml.safe_load(text)["gr00t"]["action"] == entries

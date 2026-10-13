@@ -257,14 +257,24 @@ class Gr00tAdapter(ModelAdapter):
     """Dataset info -> GR00T: groups and their order, windows, configs, steps and statistics."""
 
     name = "gr00t"
-    YAML_HELP = (
-        "Isaac-GR00T settings (read by Gr00tAdapter).\n"
-        "  action_horizon: action delta_indices are 0 .. horizon-1\n"
-        "  video_delta / state_delta: step offsets relative to the anchor\n"
-        "  language: default instruction when no text modality is selected; modality_key is the name GR00T looks it up under\n"
-        "  action: per action group {rep: ABSOLUTE|RELATIVE|DELTA, type: EEF|NON_EEF, format: DEFAULT|XYZ_ROT6D|XYZ_ROTVEC,\n"
-        "          state_key: <state group name, required for RELATIVE>}; a group left out is ABSOLUTE / NON_EEF / DEFAULT"
-    )
+    YAML_HELP = "Isaac-GR00T settings (read by Gr00tAdapter)."
+    YAML_NOTES = {
+        "action_horizon": "action delta_indices are 0 .. horizon-1",
+        "video_delta": "step offsets of the video frames relative to the anchor step",
+        "state_delta": "step offsets of the state relative to the anchor step",
+        "language.default": "instruction used when no text modality is selected",
+        "language.modality_key": "the name GR00T looks the instruction up under",
+        "action": "per action group; a group left out is ABSOLUTE / NON_EEF / DEFAULT",
+    }
+    YAML_EXAMPLES = {
+        "action": (
+            "to set a group, replace the {} above with entries named after a modality or split, e.g.:",
+            "  eef:     {rep: RELATIVE, type: EEF, format: XYZ_ROTVEC, state_key: cartesian}",
+            "  gripper: {rep: ABSOLUTE, type: NON_EEF}",
+            "rep: ABSOLUTE | RELATIVE | DELTA     type: EEF | NON_EEF     format: DEFAULT | XYZ_ROT6D | XYZ_ROTVEC",
+            "state_key: name of a selected state group (a whole state leaf); required for RELATIVE",
+        )
+    }
 
     DEFAULTS: Dict[str, Any] = {
         "action_horizon": 16,

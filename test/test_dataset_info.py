@@ -316,3 +316,69 @@ def test_string_leaves_the_loader_yields_but_does_not_describe_are_listed():
     assert [m.path for m in info.modalities] == ["observation/state", "observation/language_instruction"]
     text = info["observation/language_instruction"]
     assert text.kind == "text" and text.dtype == "string" and text.is_string and text.shape == ()
+
+
+# --------------------------------------------------------------------- the generated file reads well
+
+
+def _entry_lines(text):
+    return [ln for ln in text.splitlines() if ln.startswith("  - {")]
+
+
+def test_listing_is_grouped_by_kind_and_written_in_aligned_columns():
+    yaml = pytest.importorskip("yaml")
+    from robotdataset.info import KINDS
+
+    info = DatasetInfo.from_dataset(_oxe_like(), loader="OXEDataset", kwargs={"dataset_name": "viola", "root": "/x"})
+    ranks = [KINDS.index(m.kind) for m in info.modalities]
+    assert ranks == sorted(ranks)  # images, states, actions, text
+    text = info.to_yaml()
+    lines = _entry_lines(text)
+    assert len(lines) == len(info.modalities)
+    assert all(ln.startswith("  - {use: false, path: ") for ln in lines)  # the switch comes first
+    for column in (" kind: ", " dtype: ", " shape: ", " name: "):
+        assert len({ln.index(column) for ln in lines}) == 1, f"{column!r} does not line up"
+    # one paragraph per kind, nothing else separates entries
+    paragraphs = text.split("modalities:\n")[1].strip().split("\n\n")
+    kinds_in = [{ln.split("kind: ")[1].split(",")[0] for ln in p.splitlines()} for p in paragraphs]
+    assert all(len(k) == 1 for k in kinds_in) and len(paragraphs) == len({m.kind for m in info.modalities})
+    assert DatasetInfo.from_dict(yaml.safe_load(text)).modalities == info.modalities
+
+
+def test_role_and_split_follow_the_aligned_columns_and_survive_the_round_trip():
+    yaml = pytest.importorskip("yaml")
+    info = DatasetInfo.from_dataset(_oxe_like(), loader="OXEDataset", kwargs={"dataset_name": "viola", "root": "/x"})
+    data = yaml.safe_load(info.to_yaml())
+    for m in data["modalities"]:
+        if m["path"] == "observation/ee_states":
+            m["role"] = "state"
+            m["split"] = [{"name": "rot", "columns": [0, 9]}, {"name": "pos", "columns": [9, 16]}]
+    edited = DatasetInfo.from_dict(data)
+    text = edited.to_yaml()
+    lines = _entry_lines(text)
+    line = next(ln for ln in lines if "observation/ee_states" in ln)
+    assert line.endswith(", role: state, split: [{name: rot, columns: [0, 9]}, {name: pos, columns: [9, 16]}]}")
+    plain = [ln for ln in lines if "observation/ee_states" not in ln]
+    assert len({ln.index(" name: ") for ln in plain + [line]}) == 1  # the extras do not push the columns around
+    assert DatasetInfo.from_dict(yaml.safe_load(text)).modalities == edited.modalities
+
+
+def test_blocks_of_unknown_adapters_get_a_readable_generic_layout():
+    yaml = pytest.importorskip("yaml")
+    info = DatasetInfo.from_dataset(_oxe_like(), loader="OXEDataset", kwargs={"dataset_name": "viola", "root": "/x"})
+    block = {
+        "horizon": 8,
+        "deltas": [0, 1],
+        "nested": {"key": "a: b", "groups": {"p": {"k": 1}, "qq": {"k": 22, "z": True}}},
+        "empty": {},
+    }
+    other = DatasetInfo.from_dict({**info.to_dict(), "other_model": block})
+    text = other.to_yaml()
+    assert (
+        "other_model:\n  horizon: 8\n  deltas: [0, 1]\n  nested:\n    key: 'a: b'\n    groups:\n"
+        "      p:  {k: 1}\n      qq: {k: 22, z: true}\n  empty: {}\n"
+    ) in text
+    assert yaml.safe_load(text)["other_model"] == block
+    # help text passed by the caller is written above the block, and an empty one writes none
+    assert "\n# My model.\n# Second line.\nother_model:\n" in other.to_yaml(comments={"other_model": "My model.\nSecond line."})
+    assert "\n\nother_model:\n" in other.to_yaml(comments={"other_model": ""})
