@@ -79,3 +79,5 @@ modalities:                          # the order of this list is the order hande
 
 Unknown fields, duplicate paths, bad splits and unknown roles are rejected with the offending entry named. A
 model adapter adds its own block below `modalities:` (for example `gr00t:`), which round-trips untouched.
+
+Example notebook (dataset info -> GR00T N1.7 adapter on OXE `viola`, down to the processor inputs): [`example/example_gr00t_adapter.ipynb`](../example/example_gr00t_adapter.ipynb)

@@ -88,3 +88,5 @@ bounds). Every problem is reported in one `ValueError` that says what to fix.
 
 `robotdataset.gr00t` still exports `to_gr00t_statistics`, `check_against` and `GR00T_STAT_KEYS`; their code now lives in
 `robotdataset.adapters.gr00t`.
+
+Example notebook (dataset info -> GR00T N1.7 adapter on OXE `viola`, down to the processor inputs): [`example/example_gr00t_adapter.ipynb`](../example/example_gr00t_adapter.ipynb)
