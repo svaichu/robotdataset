@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "robotdataset"
-version = "0.3.0"
+version = "0.4.0"
 description = "A TorchRL wrapper for robot learning datasets."
 authors = [
     { name = "Vaishnavahari Seenivasan", email = "vaishnavahari.seenivasan@rwth-aachen.de" }
@@ -31,6 +31,7 @@ dependencies = [
     "torchrl>=0.2.0",
     "tqdm>=4.64.0",
     "imageio[ffmpeg]",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
