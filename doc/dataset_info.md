@@ -55,17 +55,40 @@ episodes it covers.
 
 ## The YAML file
 
+The file is generated, so it is already laid out for editing: every modality is one line with `use` first and the
+columns aligned, entries are grouped by kind (images, states, actions, text; the loader's order is kept within a
+kind) with a blank line between groups, and the header comments say what each field does.
+
 ```yaml
+# robotdataset dataset info (generated). Edit it, then load it with a model adapter.
+#
+#   use    true on every modality the model should get (all start as false)
+#   order  the order of this list is the order handed to the model
+#   name   the model-side group name (defaults to the shortest unique path suffix)
+#   role   optional override of the role implied by kind: video | state | action | language
+#   split  optional, cuts one vector leaf into named groups: [{name: eef, columns: [0, 6]}, ...]
+#
+# kind, dtype and shape describe the data; they are checked against the loader when the file is loaded.
 dataset:
   loader: LeRobotVideoDataset
   kwargs: {local_path: /data/stack_without_ft_tact_v4}
   episodes_loaded: 1
   steps_loaded: 278
   fps: 15.0
-modalities:                          # the order of this list is the order handed to the model
-  - {path: observation/images/primary, kind: image, dtype: uint8, shape: [256, 256, 3], use: true, name: primary}
-  - {path: observation/state/cartesian, kind: state, dtype: float32, shape: [6], use: true, name: cartesian}
-  - {path: action, kind: action, dtype: float32, shape: [7], use: true, name: action, split: [{name: eef, columns: [0, 6]}, {name: gripper, columns: [6, 7]}]}
+
+modalities:
+  - {use: true,  path: observation/images/primary,       kind: image,  dtype: uint8,   shape: [256, 256, 3], name: primary}
+  - {use: true,  path: observation/images/wrist,         kind: image,  dtype: uint8,   shape: [256, 256, 3], name: wrist}
+
+  - {use: true,  path: observation/state/cartesian,      kind: state,  dtype: float32, shape: [6],           name: cartesian}
+  - {use: true,  path: observation/state/gripper,        kind: state,  dtype: float32, shape: [1],           name: gripper}
+  - {use: false, path: observation/state/joints,         kind: state,  dtype: float32, shape: [7],           name: joints}
+  - {use: false, path: observation/state/target,         kind: state,  dtype: float32, shape: [6],           name: target}
+  - {use: false, path: observation/state/all,            kind: state,  dtype: float32, shape: [20],          name: all}
+
+  - {use: true,  path: action,                           kind: action, dtype: float32, shape: [7],           name: action, split: [{name: eef, columns: [0, 6]}, {name: gripper, columns: [6, 7]}]}
+
+  - {use: true,  path: observation/language_instruction, kind: text,   dtype: string,  shape: [],            name: language_instruction}
 ```
 
 | field | meaning |

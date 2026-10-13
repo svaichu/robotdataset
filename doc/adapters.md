@@ -45,16 +45,40 @@ vector (groups concatenated in order); this is also how a predicted action split
 
 ### The `gr00t:` block
 
+`Gr00tAdapter.with_defaults(info)` adds the block, and `info.to_yaml()` writes it with a note on every field (the
+notes come from the adapter, so the file explains itself without any help text being passed in):
+
 ```yaml
+# Isaac-GR00T settings (read by Gr00tAdapter).
 gr00t:
-  action_horizon: 16                 # action delta_indices = 0 .. horizon-1
-  video_delta: [0]                   # step offsets relative to the anchor
-  state_delta: [0]
+  action_horizon: 16  # action delta_indices are 0 .. horizon-1
+  video_delta: [0]    # step offsets of the video frames relative to the anchor step
+  state_delta: [0]    # step offsets of the state relative to the anchor step
   language:
-    default: null                    # instruction used when no text modality is selected
-    modality_key: annotation.human.task_description   # the name GR00T looks the text up under
-  action:                            # per action group; a group left out is ABSOLUTE / NON_EEF / DEFAULT
-    eef: {rep: RELATIVE, type: EEF, format: XYZ_ROTVEC, state_key: cartesian}
+    default: null                                    # instruction used when no text modality is selected
+    modality_key: annotation.human.task_description  # the name GR00T looks the instruction up under
+  action: {}  # per action group; a group left out is ABSOLUTE / NON_EEF / DEFAULT
+  # to set a group, replace the {} above with entries named after a modality or split, e.g.:
+  #   eef:     {rep: RELATIVE, type: EEF, format: XYZ_ROTVEC, state_key: cartesian}
+  #   gripper: {rep: ABSOLUTE, type: NON_EEF}
+  # rep: ABSOLUTE | RELATIVE | DELTA     type: EEF | NON_EEF     format: DEFAULT | XYZ_ROT6D | XYZ_ROTVEC
+  # state_key: name of a selected state group (a whole state leaf); required for RELATIVE
+```
+
+Once `action` is filled in (here for a 7-wide `action` leaf split into `eef` and `gripper`):
+
+```yaml
+# Isaac-GR00T settings (read by Gr00tAdapter).
+gr00t:
+  action_horizon: 16  # action delta_indices are 0 .. horizon-1
+  video_delta: [0]    # step offsets of the video frames relative to the anchor step
+  state_delta: [0]    # step offsets of the state relative to the anchor step
+  language:
+    default: null                                    # instruction used when no text modality is selected
+    modality_key: annotation.human.task_description  # the name GR00T looks the instruction up under
+  action:  # per action group; a group left out is ABSOLUTE / NON_EEF / DEFAULT
+    eef:     {rep: RELATIVE, type: EEF, format: XYZ_ROTVEC, state_key: cartesian}
+    gripper: {rep: ABSOLUTE, type: NON_EEF}
 ```
 
 `rep` (`ABSOLUTE`, `RELATIVE`, `DELTA`), `type` (`EEF`, `NON_EEF`) and `format` (`DEFAULT`, `XYZ_ROT6D`, `XYZ_ROTVEC`)
