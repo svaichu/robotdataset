@@ -30,12 +30,14 @@ try:
     from robotdataset.table30v2_dataset import Table30v2Dataset
     from robotdataset.agibot_dataset import AgiBotWorldBetaDataset
     from robotdataset.lerobot_video_dataset import LeRobotVideoDataset
+    from robotdataset.station_dataset import StationParquetDataset
     from robotdataset.agibot.loader import list_agibot_tasks
     from robotdataset.utils import batchViz, episodeViz, itemViz
 except Exception:  # pragma: no cover - heavy deps (torch/torchrl) not installed
     Table30v2Dataset = None  # type: ignore[assignment]
     AgiBotWorldBetaDataset = None  # type: ignore[assignment]
     LeRobotVideoDataset = None  # type: ignore[assignment]
+    StationParquetDataset = None  # type: ignore[assignment]
     list_agibot_tasks = None  # type: ignore[assignment]
     batchViz = None  # type: ignore[assignment]
     episodeViz = None  # type: ignore[assignment]
@@ -47,6 +49,7 @@ __all__ = [
     'Table30v2Dataset',
     'AgiBotWorldBetaDataset',
     'LeRobotVideoDataset',
+    'StationParquetDataset',
     'dataset2path',
     'list_datasets',
     'list_agibot_tasks',

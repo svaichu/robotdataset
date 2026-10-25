@@ -34,7 +34,7 @@ import sys
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-LOADERS = ("LeRobotVideoDataset", "Table30v2Dataset", "OXEDataset", "AgiBotWorldBetaDataset")
+LOADERS = ("LeRobotVideoDataset", "Table30v2Dataset", "OXEDataset", "AgiBotWorldBetaDataset", "StationParquetDataset")
 KINDS = ("image", "state", "action", "text", "generic")
 ROLES = ("video", "state", "action", "language")
 _ROLE_OF_KIND = {"image": "video", "state": "state", "action": "action", "text": "language"}
