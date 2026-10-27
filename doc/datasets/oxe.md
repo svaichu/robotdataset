@@ -71,6 +71,22 @@ On first use the loader:
 All steps are idempotent and resumable; interrupted downloads are detected
 (zero-length files) and retried.
 
+## Offline use and `gs://` access
+
+The bucket is only consulted for what the local cache lacks. When a dataset's metadata
+(`dataset_info.json`) is already cached, `OXEDataset(...)` does not list the bucket at all, and
+`dataset.dataset_path` (the `gs://` path) is looked up on first use only; so cached episodes load on
+a node without internet access. Missing episodes, or a first use, do need the bucket.
+
+If the bucket cannot be read, the constructor raises a `RuntimeError` that carries the reason
+TensorFlow gave (it is not reported as "unknown dataset"). On RHEL-family systems (for example
+the RWTH cluster) the usual reason is libcurl error 77: TensorFlow's built-in `gs://` client expects
+its CA bundle at `/etc/ssl/certs/ca-certificates.crt`, which does not exist there. Before the first
+`gs://` access robotdataset sets `CURL_CA_BUNDLE` to the first bundle that exists (the file named by
+`SSL_CERT_FILE`, `/etc/pki/tls/certs/ca-bundle.crt`, `/etc/ssl/certs/ca-bundle.crt`,
+`/etc/ssl/ca-bundle.pem`, then `certifi`'s bundle), unless `CURL_CA_BUNDLE` is already set or the
+Debian path exists. Set `CURL_CA_BUNDLE` yourself to override.
+
 ## Sampling
 
 ```python

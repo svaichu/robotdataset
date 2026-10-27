@@ -18,6 +18,8 @@ use in deep-learning training pipelines.
 | [AgiBotWorld-Beta](doc/datasets/agibot.md) | `AgiBotWorldBetaDataset`, `list_agibot_tasks` |
 | [LeRobot video](doc/datasets/lerobot_video.md) | `LeRobotVideoDataset` (any LeRobot v2.1 repo with external mp4 video, HuggingFace) |
 | [Statistics](doc/stats.md) | `generate_stats()` / `statistics`, per-episode records, GR00T export |
+| [Dataset info](doc/dataset_info.md) | `DatasetInfo`, `python -m robotdataset.info`: a model-agnostic modality listing as an editable YAML |
+| [Model adapters](doc/adapters.md) | `Gr00tAdapter`: modality selection, sampling windows, GR00T configs, steps and statistics from that YAML |
 | [Samplers](doc/samplers.md) | `TemporalSampler`, `EpisodeTubeletSampler`, `JAXTemporalSampler` |
 | [Visualization](doc/visualization.md) | `batchViz`, `itemViz`, `episodeViz` |
 

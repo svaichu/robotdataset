@@ -3178,13 +3178,14 @@ wheels = [
 
 [[package]]
 name = "robotdataset"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "imageio", extra = ["ffmpeg"] },
     { name = "ipykernel" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pyyaml" },
     { name = "tensordict" },
     { name = "torch" },
     { name = "torchrl" },
@@ -3237,6 +3238,7 @@ requires-dist = [
     { name = "pyarrow", marker = "extra == 'all'", specifier = ">=10.0.0" },
     { name = "pyarrow", marker = "extra == 'hf'", specifier = ">=10.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "scipy", marker = "extra == 'dev'", specifier = ">=1.7" },
     { name = "tensordict", specifier = ">=0.2.1" },
     { name = "tensorflow", marker = "extra == 'all'", specifier = ">=2.11.1" },

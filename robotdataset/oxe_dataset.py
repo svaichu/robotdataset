@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
@@ -52,6 +53,16 @@ except ImportError:  # pragma: no cover - optional dependency
 
 OXE_BUCKET_URL = "gs://gresearch/robotics"
 
+# TensorFlow's built-in gs:// client looks for the CA bundle at the Debian path; on RHEL-family
+# systems (e.g. the RWTH cluster) that file does not exist and every request fails with libcurl
+# error 77 ("Problem with the SSL CA cert"), which shows up as an empty bucket listing.
+_DEFAULT_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
+_CA_BUNDLE_FALLBACKS = (
+    "/etc/pki/tls/certs/ca-bundle.crt",  # RHEL / Rocky / CentOS
+    "/etc/ssl/certs/ca-bundle.crt",
+    "/etc/ssl/ca-bundle.pem",  # SUSE
+)
+
 _DATASET_CACHE: Optional[Dict[str, Dict[str, str]]] = None
 _TF_TENSOR_TYPES = (tf.Tensor,) if tf is not None else tuple()
 
@@ -77,7 +88,34 @@ def _progress(
 # TF stack guard
 # ---------------------------------------------------------------------------
 
+def _ensure_ca_bundle() -> None:
+    """Point TensorFlow's gs:// client at a CA bundle that exists on this machine.
+
+    The client reads only ``CURL_CA_BUNDLE`` (``SSL_CERT_FILE`` is ignored).  An existing
+    ``CURL_CA_BUNDLE`` and the Debian default are left alone; otherwise ``SSL_CERT_FILE``, a
+    known system bundle or ``certifi``'s bundle is used.  Must run before the first ``gs://`` access.
+    """
+    if os.environ.get("CURL_CA_BUNDLE"):
+        return
+    ssl_cert_file = os.environ.get("SSL_CERT_FILE")
+    if ssl_cert_file and os.path.exists(ssl_cert_file):
+        os.environ["CURL_CA_BUNDLE"] = ssl_cert_file
+        return
+    if os.path.exists(_DEFAULT_CA_BUNDLE):
+        return
+    for path in _CA_BUNDLE_FALLBACKS:
+        if os.path.exists(path):
+            os.environ["CURL_CA_BUNDLE"] = path
+            return
+    try:
+        import certifi
+    except ImportError:
+        return
+    os.environ["CURL_CA_BUNDLE"] = certifi.where()
+
+
 def _require_tf_stack() -> None:
+    _ensure_ca_bundle()
     if tf is None or tfds is None:
         raise ImportError(
             "OXEDataset requires tensorflow and tensorflow-datasets. "
@@ -100,6 +138,8 @@ def _get_dataset_map(refresh: bool = False, dataset_name: Optional[str] = None) 
 
     if _DATASET_CACHE is None:
         _DATASET_CACHE = {}
+
+    _ensure_ca_bundle()
 
     # When a dataset name is known, try its direct GCS path first — avoids scanning
     # the entire bucket (hundreds of API calls) just to validate one dataset.
@@ -134,6 +174,41 @@ def validate_dataset_name(dataset_name: str, version: Optional[str] = None) -> b
     if version is not None:
         return version in datasets[dataset_name]
     return True
+
+
+def _bucket_unreachable_message(dataset_name: str, version: Optional[str]) -> str:
+    """Why an empty bucket listing is not 'unknown dataset' but a gs:// access problem."""
+    cause = "the listing came back empty"
+    for probe in ("exists", "listdir"):  # `exists` carries the libcurl reason; `listdir` only says "not found"
+        fn = getattr(tf.io.gfile, probe, None)
+        if fn is None:
+            continue
+        try:
+            fn(OXE_BUCKET_URL)
+        except Exception as exc:  # the reason TensorFlow gives is the useful part
+            cause = f"{type(exc).__name__}: {str(exc)[:300]}"
+            break
+    what = f"'{dataset_name}'" + (f" version '{version}'" if version else "")
+    return (
+        f"Cannot read the OXE bucket {OXE_BUCKET_URL} ({cause}), so {what} could not be looked up. "
+        "Datasets already in the local cache load without the bucket; anything else needs gs:// access: "
+        "network egress to storage.googleapis.com and a CA bundle for TensorFlow's gs:// client "
+        "(set CURL_CA_BUNDLE to the system bundle, e.g. /etc/pki/tls/certs/ca-bundle.crt)."
+    )
+
+
+def _resolve_dataset_path(dataset_name: str, version: Optional[str]) -> str:
+    """GCS path of a dataset (and version), with a precise error when the bucket cannot be read."""
+    if validate_dataset_name(dataset_name, version):
+        return dataset2path(dataset_name, version=version)
+    datasets = list_datasets()
+    if not datasets:
+        raise RuntimeError(_bucket_unreachable_message(dataset_name, version))
+    raise ValueError(
+        f"Unknown dataset '{dataset_name}'"
+        + (f" version '{version}'" if version else "")
+        + f". Available datasets: {', '.join(sorted(datasets))}"
+    )
 
 
 def dataset2path(dataset_name: str, version: Optional[str] = None) -> str:
@@ -382,25 +457,20 @@ class OXEDataset(DatasetStatsMixin, BaseDatasetExperienceReplay):
     ) -> None:
         dataset_name = dataset_name.strip("/")
 
-        if not validate_dataset_name(dataset_name, version):
-            raise ValueError(
-                f"Unknown dataset '{dataset_name}'"
-                + (f" version '{version}'" if version else "")
-                + f". Available datasets: {', '.join(sorted(list_datasets().keys()))}"
-            )
-
         _require_tf_stack()
 
         self.dataset_name = dataset_name
         self.split = split
         self.version = version
         self.episodes: Optional[List[int]] = list(episodes) if episodes is not None else None
-        self.dataset_path = dataset2path(dataset_name, version=version)
+        self._dataset_path: Optional[str] = None  # resolved from the bucket only when needed
         self.root = _get_cache_dir(root)
         self.load_str_fields = load_str_fields
 
         # ------------------------------------------------------------------
-        # 1. Sync metadata JSON files from GCS if not already present
+        # 1. Sync metadata JSON files from GCS if not already present.
+        #    A dataset whose metadata is cached never touches the bucket here;
+        #    ``dataset_path`` is looked up only when something has to be fetched.
         # ------------------------------------------------------------------
         local_dir = self._local_tfds_dir()
         info_file = local_dir / "dataset_info.json"
@@ -518,6 +588,13 @@ class OXEDataset(DatasetStatsMixin, BaseDatasetExperienceReplay):
     # ------------------------------------------------------------------
     # BaseDatasetExperienceReplay abstract interface
     # ------------------------------------------------------------------
+
+    @property
+    def dataset_path(self) -> str:
+        """GCS path of the dataset; looked up on first use, so cached data loads offline."""
+        if self._dataset_path is None:
+            self._dataset_path = _resolve_dataset_path(self.dataset_name, self.version)
+        return self._dataset_path
 
     @property
     def data_path(self) -> Path:
