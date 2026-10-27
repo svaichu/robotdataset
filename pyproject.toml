@@ -48,6 +48,7 @@ hf = [
 ]
 dev = [
     "pytest>=7.0",
+    "scipy>=1.7",
 ]
 all = [
     "tensorflow>=2.11.1",
